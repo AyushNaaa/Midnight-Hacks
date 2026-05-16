@@ -1,7 +1,7 @@
 # ZK-Guard — Product Requirements Document
 
-**Tagline:** Privacy-preserving proof-of-humanity for Web3 games and DApps.
-**One-liner:** A lightweight in-browser behavioral analyzer feeds a boolean result into Midnight's local Proof Server, which generates a ZK proof. A Compact smart contract verifies the proof on-chain and issues a "Verified Human / Clean Player" session badge — without ever exposing the user's raw telemetry, background processes, or device fingerprint to the ledger or the game developer.
+**Tagline:** Privacy-preserving proof-of-humanity and advanced LLM-powered anticheat for Web3 games and DApps.
+**One-liner:** An advanced local AI model, built on LLM sequence-modeling architectures and trained on industry-standard anticheat datasets, analyzes high-frequency standard input (mouse, keyboard, controller) and spatial multiplayer game states to detect cheating locally. It feeds a boolean result into Midnight's local Proof Server, which generates a ZK proof. A Compact smart contract verifies the proof on-chain and issues a "Verified Human / Clean Player" session badge — without ever exposing the user's raw telemetry, game state, or device fingerprint to the ledger or the game developer.
 
 ---
 
@@ -10,18 +10,19 @@
 | Layer | Choice | Rationale |
 |---|---|---|
 | Smart contracts | **Compact** (Midnight DSL) | TypeScript-inspired ZK circuit language; the only supported language for Midnight's proof system. ZK logic (circuit + ledger state) lives here. |
-| Frontend framework | **React 18 + Vite + TypeScript** | HMR, TypeScript-native, no SSR needed for a demo SPA. Plays well with TF.js and Midnight.js. |
+| Frontend framework | **React 18 + Vite + TypeScript** | HMR, TypeScript-native, no SSR needed for a demo SPA. Plays well with Midnight.js. |
 | Blockchain SDK | **@midnight-ntwrk/compact-js** + **@midnight-ntwrk/dapp-connector-api** | Official Midnight SDK. compact-js wraps compiled contracts; dapp-connector-api brokers Lace wallet connection. |
 | Wallet | **Lace Wallet** (Midnight-enabled build) | Only wallet with Midnight shard support. Required for signing `mintBadge` transactions. |
 | Local infrastructure | **Docker** (Midnight Node + GraphQL Indexer + Proof Server) | Local proof generation is non-negotiable — raw telemetry must never leave the device. All three services run via `docker compose up`. |
-| AI mock | **TF.js** (click-speed variance, rule-based threshold) | Runs fully in-browser. No external API call. CV of inter-click intervals → `isHuman: boolean`. Swap for full behavioral ML model post-hackathon. |
+| AI Model Architecture | **Transformer-based Sequence Model (LLM)** | Treats user inputs over time as a "language" sequence. A miniaturized Transformer model trained to identify anomalies, aimbots, and macro patterns from raw input tokens. |
+| AI Inference Engine | **ONNX Runtime Web (WASM/WebGL)** | Cross-platform, fast local inference inside the browser. Allows running highly compressed/quantized Transformer models without server API calls. |
 | Styling | **Tailwind CSS** | Utility speed for demo UI. No design system ceremony needed for a hackathon. |
 | Package manager | **pnpm** | Workspace support; faster installs than npm for a monorepo. |
 
 **⚠ Unresolved decisions (flagged inline):**
 - 🚩 **Compact circuit inputs:** Can the hackathon devnet handle a two-private-witness circuit (`isHuman: Boolean` + `confidence: Uint8`) or should we reduce to a single boolean witness to minimize compile risk? Decided in §2 after first successful compile.
 - 🚩 **Session ID scheme:** wallet address hash vs. client-generated UUID. Affects replay-attack surface. Decided in §2 / §4 interface agreement.
-- 🚩 **TF.js model depth:** pure threshold rule (CV of inter-click intervals) vs. a tiny pre-trained `.json` model loaded via `tf.loadLayersModel`. Recommend threshold-only for hackathon determinism. Confirm in §3.
+- 🚩 **Model Quantization:** Int8 vs. Float16 quantization for the LLM sequence model to balance accuracy and browser memory limits.
 
 ---
 
@@ -29,7 +30,7 @@
 
 - **Phase 1:** Local infrastructure (§1) — Docker services running before any contract or frontend code.
 - **Phase 2:** Compact smart contract (§2) — compile + deploy before wiring the SDK.
-- **Phase 3:** Mock AI module (§3) — behavioral analyzer producing typed output.
+- **Phase 3:** Advanced AI Anticheat module (§3) — LLM sequence model training, quantization, and multiplayer state processing.
 - **Phase 4:** SDK integration layer (§4) — Midnight.js glue between AI output and on-chain tx.
 - **Phase 5:** React frontend (§5) — demo UI wiring phases 1–4 together.
 - **Phase 6:** Integration, demo polish, video (§6) — end-to-end happy path, then recording.
@@ -145,40 +146,54 @@ Each numbered section below = one discrete build task assignable to a team membe
 
 ---
 
-# PHASE 3 — MOCK AI MODULE
+# PHASE 3 — ADVANCED AI ANTICHEAT MODULE (LLM SEQUENCE MODEL)
 
-## 3. Behavioral Analyzer (TF.js Click-Speed Variance)
+## 3. Local Anticheat Sequence Model Architecture
 
-**Goal:** Implement a lightweight, self-contained TypeScript module that captures a rolling window of user click events, computes behavioral entropy, and outputs a typed result that the SDK layer can convert into a ZK proof witness.
+**Goal:** Implement a local, Transformer-based sequence model (analogous to an LLM, but modeling "input behavior" instead of language) trained on datasets from existing anticheat systems. The model processes high-frequency standard input (mouse, keyboard, controller) as continuous token sequences, identifying cheating anomalies, while cross-referencing multi-agent spatial game state to catch widespread session abuse.
+
+**Technical Specifications:**
+1. **Data Ingestion & Tokenization:**
+   - **Input Stream Formatting:** High-frequency polling (e.g., 60Hz-120Hz) of `[delta_time, dx, dy, mouse_btn_state, keys_pressed]`.
+   - **Spatial Networking:** Real-time extraction of multiplayer state snapshots formatted as `[player_id, x, y, z, pitch, yaw, health]`.
+   - **Token Generation:** The continuous float values are embedded into a dense vector space, creating sequence tokens. E.g., a 1-second window becomes a sequence of 60-120 embedded tokens.
+2. **Model Architecture:**
+   - **Base:** Miniaturized Decoder-Only Transformer (e.g., a variant of GPT/Llama architecture scaled down to <10M parameters).
+   - **Attention Mechanism:** Causal self-attention allows the model to predict the probability of the *next* input event. If actual input deviates massively from human-probability distributions (e.g., perfect pixel-snapping to a target), the sequence is flagged as non-human.
+   - **Multiplayer State Fusion:** Uses a secondary cross-attention layer mapping the user's input embeddings against the embeddings of other entities in the spatial network state, effectively spotting "ESP" or "Wallhacks" (e.g., aiming at an entity behind a wall before it's visible).
+3. **Training Methodology (Off-Chain):**
+   - Pre-training on massive open-source competitive gaming datasets (e.g., CS:GO or Valorant demo files converted to input streams).
+   - Fine-tuning with Contrastive Learning on labeled "Clean" vs "Cheat" datasets.
+4. **Inference Pipeline:**
+   - Export the trained PyTorch model to ONNX.
+   - Apply dynamic Int8 Quantization to reduce the model size to < 10MB.
+   - Run inference in the browser via `onnxruntime-web` utilizing WebAssembly and WebGL execution providers.
 
 **Deliverables:**
+- `src/ai/modelLoader.ts` wrapping `onnxruntime-web` to load the `anticheat-sequence-model.onnx` file asynchronously.
+- `src/ai/tokenizers.ts` to convert raw DOM mouse/keyboard events and mock spatial network updates into Float32Array tensors formatted as `[batch, sequence_length, features]`.
 - `src/ai/behaviorAnalyzer.ts` with:
-  - `BehaviorResult` type: `{ isHuman: boolean; confidence: number; sessionId: string; eventCount: number; }`.
+  - `BehaviorResult` type: `{ isHuman: boolean; confidence: number; sessionId: string; }`.
   - `BehaviorAnalyzer` class:
-    - Constructor accepts `windowSize: number = 30` and `botCVThreshold: number = 0.15`.
-    - `recordEvent(timestamp: number): void` — appends to the rolling buffer.
-    - `analyze(): BehaviorResult | null` — returns `null` if fewer than `windowSize` events recorded; otherwise computes CV of inter-event intervals and returns a `BehaviorResult`.
-    - `reset(): void` — clears buffer (called after successful verification).
-  - CV computation: `CV = stddev(intervals) / mean(intervals)`. Human clicking is noisy (high CV); bots are regular (low CV). CV ≥ threshold → `isHuman: true`.
-  - `confidence` is a 0–100 integer: `Math.round(Math.min(CV / 0.5, 1.0) * 100)`. Capped at 100.
-  - `sessionId` generated as `crypto.randomUUID()` on first `recordEvent()` call; stable for the lifetime of that buffer.
-- `src/ai/behaviorAnalyzer.test.ts` — three unit tests:
-  - Bot simulation: 30 events at exactly 100ms intervals → `isHuman: false`.
-  - Human simulation: 30 events with Gaussian jitter (σ = 40ms) → `isHuman: true`.
-  - Insufficient events: 10 events → `analyze()` returns `null`.
+    - Maintains a sliding window buffer of the last N input events and network state snapshots.
+    - `analyze()` — packages the sliding window into an ONNX tensor, executes the model forward pass, applies a Softmax over the anomaly classification logits, and returns a `BehaviorResult`.
+- `src/ai/behaviorAnalyzer.test.ts` — unit tests:
+  - Simulate typical human inputs and clean game state → `isHuman: true`.
+  - Simulate known cheat signatures (e.g., aimbot input snapping, impossible reaction times) → `isHuman: false`.
+  - Simulate clean local input but compromised multiplayer state (others cheating) → properly flags the session anomaly.
 
 **Acceptance criteria:**
-- Bot simulation test passes (CV < 0.15, `isHuman: false`).
-- Human simulation test passes (`isHuman: true`, `confidence` > 50).
-- `BehaviorResult` type is importable by `midnightService.ts` with no type errors.
-- Module has zero external dependencies beyond `crypto` (Web API) — no `axios`, no TF.js model load at runtime for the rule-based path.
+- AI model size is `< 20MB` and loads locally via `onnxruntime-web` in under 3 seconds.
+- Inference for a single sequence window takes `< 100ms` in a standard browser environment to avoid interrupting gameplay.
+- Cheating input simulations are accurately flagged (`isHuman: false`).
+- Clean input simulations pass verification (`isHuman: true`, `confidence` > 50).
+- Zero reliance on external backend server API calls for inference.
 
 **Dependencies:** None. Can build in parallel with §2.
 
 **Technical notes + risks:**
-- The `crypto.randomUUID()` call requires a secure context (HTTPS or `localhost`). Vite's dev server on `localhost` qualifies. No polyfill needed.
-- CV = 0 for perfectly regular input (edge case: all inter-event intervals identical). Guard: if `mean === 0`, return `{ isHuman: false, confidence: 0 }`.
-- If the team wants to demo TF.js specifically (for pitch optics), load a tiny 2-layer model trained on synthetic bot/human click data as a JSON file. Keep the rule-based path as a runtime fallback. Model file must be < 100KB to avoid bundle bloat.
+- **Risk:** Training a high-quality model from scratch takes too much time for a hackathon. **Mitigation:** Rely on pre-existing behavioral datasets (e.g., mouse dynamics datasets) and overfit a small model to obvious cheating signatures (like zero-jitter linear paths) to prove the concept for the demo.
+- **Risk:** ONNX Runtime Web can struggle with memory management on some mobile devices. **Mitigation:** Ensure sequence length window is kept small (e.g., max 100 tokens).
 
 ---
 
@@ -216,7 +231,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 
 **Acceptance criteria:**
 - `connectLaceWallet()` opens the Lace Wallet prompt in a Midnight-enabled browser.
-- `submitVerification()` with a valid `BehaviorResult` (from a human-simulating test) returns a non-empty `txHash`.
+- `submitVerification()` with a valid `BehaviorResult` returns a non-empty `txHash`.
 - `queryBadgeStatus()` with that session ID returns `true` within 10 seconds of tx confirmation.
 - Mock mode (`VITE_USE_MOCK_SDK=true`) makes the frontend fully usable without a running Docker stack.
 
@@ -234,32 +249,32 @@ Each numbered section below = one discrete build task assignable to a team membe
 
 ## 5. Demo UI
 
-**Goal:** Build a three-panel demo UI that shows the full ZK-Guard flow: click capture → AI analysis → proof generation → badge display → game developer query. The UI must be compelling enough to drive the 2-minute demo video.
+**Goal:** Build a three-panel demo UI that shows the full ZK-Guard flow: gameplay input capture → LLM sequence anticheat analysis → proof generation → badge display → game developer query. The UI must be compelling enough to drive the 2-minute demo video.
 
 **Deliverables:**
-- `src/components/ClickTestPanel.tsx`:
-  - Renders a large clickable zone ("Click here to prove you're human").
-  - Listens for `mousedown` events, calls `analyzer.recordEvent(Date.now())`.
-  - Shows a live event counter and a real-time CV readout.
-  - "Analyze" button appears after 30 events are captured; disabled before.
-  - On click: triggers the full verification flow (§4).
+- `src/components/GameplayTestPanel.tsx`:
+  - Renders a mock game environment or standard input capture zone (canvas/div).
+  - Listens for comprehensive inputs (mouse movement trajectories, button hold times, keyboard presses) and feeds them to the tokenizer.
+  - Simulates multiplayer state data feed.
+  - Shows a live event sequence counter and AI inference confidence score.
+  - "Analyze Input & State" button triggers the full verification flow (§4).
 - `src/components/VerificationStatus.tsx`:
   - Renders 4 states driven by a `VerificationState` enum: `idle | analyzing | proving | verified`.
-  - `idle`: prompt to click the test zone.
-  - `analyzing`: spinner + "Analyzing behavioral entropy…".
+  - `idle`: prompt to test gameplay input.
+  - `analyzing`: spinner + "LLM sequence model analyzing input trajectories and spatial networks…".
   - `proving`: spinner + "Generating ZK proof locally — your data stays on your device." (This state can take 5–30s; the copy manages expectation.)
   - `verified`: green badge, tx hash (truncated), session ID display.
 - `src/components/GameDevView.tsx`:
   - Simulates the game developer's server-side check.
   - Shows a "Check badge" button that calls `queryBadgeStatus(sessionId)`.
-  - Renders `✅ Verified Human — session admitted` or `❌ Unverified — session rejected`.
-  - This is the money shot for the demo: show that the game dev gets a binary answer with zero access to the underlying telemetry.
+  - Renders `✅ Verified Clean Player — session admitted` or `❌ Unverified — session rejected`.
+  - This is the money shot for the demo: show that the game dev gets a binary answer with zero access to the underlying telemetry or local AI process.
 - `src/components/WalletConnect.tsx`:
   - "Connect Lace Wallet" button.
   - Shows wallet address (truncated) when connected.
-  - Disables `ClickTestPanel` until connected.
+  - Disables `GameplayTestPanel` until connected.
 - `src/App.tsx`:
-  - Three-column layout: `WalletConnect` header → `ClickTestPanel` (left) → `VerificationStatus` (center) → `GameDevView` (right).
+  - Three-column layout: `WalletConnect` header → `GameplayTestPanel` (left) → `VerificationStatus` (center) → `GameDevView` (right).
   - `useVerification()` hook manages shared state across all panels.
 - `src/hooks/useVerification.ts`:
   - Encapsulates the full state machine: wallet → analyzer → service → badge.
@@ -293,13 +308,13 @@ Each numbered section below = one discrete build task assignable to a team membe
   - [ ] `docker compose up` — all 3 services healthy
   - [ ] Contract deployed, address in `.env`
   - [ ] Lace Wallet connected in Chrome with devnet MIDNIGHT loaded
-  - [ ] 30 clicks captured in ClickTestPanel → `isHuman: true` result
+  - [ ] Sequence inputs and network state captured in GameplayTestPanel → `isHuman: true` result
   - [ ] Proof generated by local Proof Server (not mocked) → tx submitted
   - [ ] `isVerified(sessionId)` via GraphQL Indexer returns `true`
   - [ ] GameDevView shows ✅ badge
 - Demo video (90 seconds max):
-  - 0–15s: problem statement voiceover ("Traditional anti-cheat requires kernel access…")
-  - 15–45s: live click capture → proof generation → badge
+  - 0–15s: problem statement voiceover ("Traditional anti-cheat requires kernel access and intrudes on privacy…")
+  - 15–45s: live input trajectory capture + LLM Sequence analysis → proof generation → badge
   - 45–75s: GameDevView query → badge confirmed, zero raw data exposed
   - 75–90s: pitch bullet summary
 - `PITCH.md`: three technical moat bullets (already drafted above in §0 of this PRD — finalize here).
@@ -327,7 +342,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 |---|---|---|---|
 | 1 | Single vs. two-input circuit (`isHuman` only vs. `isHuman + confidence`) | Dev A (Compact) | After first `compact compile` attempt in §2 |
 | 2 | Session ID scheme: `crypto.randomUUID()` vs. `keccak256(wallet + timestamp)` | Dev A + Dev B | §2/§4 interface agreement, Friday night |
-| 3 | TF.js threshold-only vs. tiny pre-trained model | Dev B (AI) | §3 implementation decision |
+| 3 | AI Model constraints: Optimizing the Transformer for memory via ONNX | Dev B (AI) | §3 implementation decision |
 | 4 | ARM Mac compatibility for Midnight Docker images | Dev A | §1 Friday night — if blocked, assign Proof Server to Intel machine |
 | 5 | Lace Wallet compatibility on Brave vs. Chrome | Dev C | §1/§5 Friday night browser test |
 | 6 | Demo: real proof or mock mode for video recording | All | §6 Sunday morning based on pipeline stability |
@@ -335,7 +350,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 ## Risks Roll-Up (Top 5)
 
 1. **Compact circuit compile failure or API mismatch** — Midnight devnet tooling is pre-production. If `compact compile` fails or the `Proof<T>` API doesn't match the docs, the entire proof pipeline is blocked. Mitigation: Dev A validates a trivial circuit (boolean assert only) by end of Friday night. If blocked, mock the proof server call for the demo.
-2. **Proof Server ARM architecture incompatibility** — M1/M2 Macs may not run the Proof Server image natively. Mitigation: test Rosetta 2 emulation Friday night; if incompatible, designate one team member's Intel machine as the dedicated proof server for the demo.
+2. **LLM Sequence Model Size and Complexity** — Advanced ML models trained on anticheat systems can be large and slow. Mitigation: heavily compress/quantize the Transformer model using ONNX INT8 and keep the sequence token window extremely short.
 3. **Lace Wallet devnet mode not functional** — Lace may require specific Midnight devnet configuration flags. Mitigation: test wallet connection before writing any contract code. If wallet connection fails, the signing step can be bypassed with a pre-signed tx for demo purposes.
 4. **Proof generation latency > 60 seconds** — makes the demo awkward and video pacing impossible. Mitigation: reduce circuit complexity (single boolean witness, not two). Pre-warm the Proof Server before recording. Use mock mode for the video if latency is > 30s.
 5. **GraphQL Indexer sync lag** — if the indexer doesn't reflect the tx immediately, the GameDevView shows `false` right after the badge is minted. Mitigation: poll `isVerified` with a 3-second retry loop (max 5 retries) before showing the result in `GameDevView`.
@@ -343,7 +358,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 ## Definition of Done — Whole Product
 
 The full ZK-Guard demo is done when:
-- A new user on Chrome with Lace Wallet installed can: connect wallet → click 30 times → watch proof generate locally → see the Verified Human badge → see a simulated game developer query return `true` — **in under 90 seconds, with zero console errors, on the demo machine.**
+- A new user on Chrome with Lace Wallet installed can: connect wallet → provide high-frequency gameplay input trajectories → watch the local LLM analyze it and the spatial state → watch proof generate locally → see the Verified Clean Player badge → see a simulated game developer query return `true` — **in under 90 seconds, with zero console errors, on the demo machine.**
 - The on-chain `isVerified(sessionId)` query (against the real GraphQL Indexer, not a mock) returns `true`.
-- The raw click timing data is verifiably absent from the transaction body (show this in the demo — inspect the tx in the Midnight block explorer or via GraphQL).
+- The raw sequence data and gameplay tensors are verifiably absent from the transaction body (show this in the demo — inspect the tx in the Midnight block explorer or via GraphQL).
 - The pitch video is recorded and the three technical moat bullets are locked.
