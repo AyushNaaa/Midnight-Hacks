@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0a0a0f;
+  --color-bg-secondary: #12121a;
+  --color-bg-card: #1a1a2e;
+  --color-bg-card-hover: #22223a;
+  --color-border: #2a2a3e;
+  --color-accent: #00d4ff;
+  --color-accent-dim: #00d4ff33;
+  --color-danger: #ff4757;
+  --color-danger-dim: #ff475733;
+  --color-warning: #ffa502;
+  --color-warning-dim: #ffa50233;
+  --color-success: #2ed573;
+  --color-success-dim: #2ed57333;
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #8888a0;
+  --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+
+/* Pulse animation for threat indicators */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-danger {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-danger-dim); }
+  50% { box-shadow: 0 0 20px 4px var(--color-danger-dim); }
+}
+
+.pulse-danger {
+  animation: pulse-danger 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-success {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-success-dim); }
+  50% { box-shadow: 0 0 15px 3px var(--color-success-dim); }
+}
+
+.pulse-success {
+  animation: pulse-success 2s ease-in-out infinite;
+}

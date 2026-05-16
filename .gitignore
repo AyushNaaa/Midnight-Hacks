@@ -1,0 +1,30 @@
+# Python
+server/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+
+# Node
+dashboard/node_modules/
+dashboard/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Models
+*.pt
+*.pth
+*.onnx
+
+# Data
+*.csv
+*.parquet
+data/

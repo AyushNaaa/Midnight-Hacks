@@ -1,0 +1,39 @@
+// ZK-Guard Compact Smart Contract (§4.1)
+// Midnight ZK proof verification + session badge minting.
+//
+// TODO: Implement when Midnight tooling is available.
+// See PRD §4.1 for full contract spec.
+//
+// ledger {
+//   verifiedSessions: Map<Bytes32, VerificationRecord>;
+// }
+//
+// struct VerificationRecord {
+//   isVerified: Boolean;
+//   timestamp:  Uint64;
+//   sessionId:  Bytes32;
+// }
+//
+// circuit verifyHumanity(
+//   private isHuman:   Boolean,
+//   public  sessionId: Bytes32
+// ): Boolean {
+//   assert(isHuman == true);
+//   return true;
+// }
+//
+// export transaction mintBadge(
+//   proof:     Proof<verifyHumanity>,
+//   sessionId: Bytes32
+// ): Void {
+//   verify(verifyHumanity, proof, sessionId);
+//   verifiedSessions.set(sessionId, VerificationRecord {
+//     isVerified: true,
+//     timestamp:  ledger.blockTime,
+//     sessionId:  sessionId,
+//   });
+// }
+//
+// export query isVerified(sessionId: Bytes32): Boolean {
+//   return verifiedSessions.lookup(sessionId)?.isVerified ?? false;
+// }
