@@ -19,16 +19,16 @@
 | Blockchain SDK | **@midnight-ntwrk/compact-js** + **@midnight-ntwrk/dapp-connector-api** | Official Midnight SDK. compact-js wraps compiled contracts; dapp-connector-api brokers Lace wallet connection. |
 | Wallet | **Lace Wallet** (Midnight-enabled build) | Only wallet with Midnight shard support. Required for signing `mintBadge` transactions. |
 | Local infrastructure | **Docker** (Midnight Node + GraphQL Indexer + Proof Server) | Local proof generation is non-negotiable — raw telemetry must never leave the device. All three services run via `docker compose up`. |
-| AI Model Architecture | **Behavioral Sequence Model (Autoencoder + Anomaly Detector)** | Treats user inputs over time as behavioral sequences. A lightweight autoencoder trained on human mouse/keyboard dynamics flags anomalous patterns (aimbots, macros, wallhacks) via reconstruction error. |
-| Behavioral Mesh | **Cross-Player Spatial Anomaly Graph** | Unique differentiator: correlates each player's inputs against what they *should* be able to see/know based on other players' positions, detecting ESP/wallhacks at a session level. |
-| AI Inference Engine | **ONNX Runtime Web (WASM/WebGL)** | Cross-platform, fast local inference inside the browser. Runs quantized models without server API calls. |
+| AI Model Architecture | **Dual-Model Deep Learning Pipeline** | **Model A:** Fine-tuned Transformer sequence model (~5-10M params) trained via next-event prediction on behavioral input streams. Detects aimbots, macros, and inhuman reaction times through temporal probability analysis. **Model B:** Graph Attention Network (GAT) for Behavioral Mesh — learns spatial awareness anomalies across all players in a session. Both exported to ONNX, run locally in-browser. |
+| Behavioral Mesh | **GNN-Powered Cross-Player Spatial Anomaly Graph** | Unique differentiator: a trained Graph Attention Network correlates each player's inputs against what they *should* be able to see/know based on other players' positions. Learns normal vs. impossible awareness patterns — not just heuristic correlation, but a *trained* understanding of spatial behavior at the session level. |
+| AI Inference Engine | **ONNX Runtime Web (WASM/WebGL)** | Cross-platform, fast local inference inside the browser. Handles models up to ~100MB via streaming load + WebGL acceleration. No server API calls. |
 | Styling | **Tailwind CSS** | Utility speed for demo UI. No design system ceremony needed for a hackathon. |
 | Package manager | **pnpm** | Workspace support; faster installs than npm for a monorepo. |
 
 **⚠ Unresolved decisions (flagged inline):**
 - ✅ **Compact circuit inputs:** **RESOLVED — single boolean witness (`isHuman: Boolean`).** Confidence is shown in the UI only. This minimizes circuit compile risk and proof latency.
 - 🚩 **Session ID scheme:** wallet address hash vs. client-generated UUID. Affects replay-attack surface. Decided in §2 / §4 interface agreement.
-- ✅ **Model architecture:** **RESOLVED — Autoencoder + anomaly detector.** Achievable within 48 hours using synthetic training data generated during the hackathon.
+- ✅ **Model architecture:** **RESOLVED — Dual deep learning pipeline.** (1) Transformer sequence model for individual input anomaly detection, (2) Graph Attention Network for cross-player Behavioral Mesh. Both trained overnight Saturday on GPU, exported to ONNX for browser inference.
 
 ---
 
@@ -36,7 +36,7 @@
 
 - **Phase 1:** Local infrastructure (§1) — Docker services running before any contract or frontend code.
 - **Phase 2:** Compact smart contract (§2) — compile + deploy before wiring the SDK.
-- **Phase 3:** AI Anticheat + Behavioral Mesh (§3) — anomaly detector training, Behavioral Mesh graph, quantization, and browser inference.
+- **Phase 3:** AI Anticheat + Deep Behavioral Mesh (§3) — Transformer sequence model training, GNN mesh training, ONNX export, and browser inference pipeline.
 - **Phase 4:** SDK integration layer (§4) — Midnight.js glue between AI output and on-chain tx.
 - **Phase 5:** React frontend (§5) — demo UI wiring phases 1–4 together.
 - **Phase 6:** Integration, demo polish, video (§6) — end-to-end happy path, then recording.
@@ -149,103 +149,178 @@ Each numbered section below = one discrete build task assignable to a team membe
 
 ---
 
-# PHASE 3 — AI ANTICHEAT + BEHAVIORAL MESH ANALYSIS
+# PHASE 3 — DEEP AI ANTICHEAT + GNN-POWERED BEHAVIORAL MESH
 
-## 3A. Behavioral Anomaly Detector (Input Analysis)
+## 3A. Transformer Behavioral Sequence Model (Input Analysis) 🧠
 
-**Goal:** Build a local anomaly detection model that analyzes mouse/keyboard input streams and flags non-human behavior patterns (aimbots, macros, inhuman reaction times). The model must be **trainable within the hackathon** using synthetic data we generate ourselves, and must **run in the browser** via ONNX Runtime Web.
+**Goal:** Build a **Transformer-based sequence model** — architecturally analogous to a language model (LLM), but trained on behavioral input streams instead of text — that analyzes mouse, keyboard, and controller input as temporal token sequences and detects cheating through next-event probability analysis. This is the same class of architecture that powers GPT, but applied to the "language" of human motor behavior. The model runs **100% locally in the browser** via ONNX Runtime Web.
+
+**Why a Transformer Beats an Autoencoder:**
+- **Temporal reasoning:** Autoencoders see fixed windows. Transformers with causal attention understand *sequences* — they learn that a 250ms average reaction time that suddenly drops to 50ms mid-game is suspicious, even if each individual frame looks plausible.
+- **Next-event prediction:** Like a language model predicting the next word, our model predicts the probability distribution of the next input event. Cheaters produce low-probability events *consistently*. A humanized aimbot might fool a frame-by-frame detector, but it produces improbable *sequences* that a Transformer catches.
+- **Scalability:** Transformers scale with data and compute. Train longer = better model. An autoencoder plateaus quickly.
 
 **Technical Specifications:**
-1. **Data Ingestion & Feature Extraction:**
-   - **Input Stream:** Capture DOM mouse/keyboard events at native browser event rate (~60Hz). Each event produces a feature vector: `[delta_time_ms, dx, dy, velocity, acceleration, angular_velocity, mouse_btn_state, keys_bitmask]` (8 features).
-   - **Windowing:** Sliding window of 64 consecutive events (~1 second of input). Each window produces a `Float32Array` tensor of shape `[1, 64, 8]`.
-   - **Feature Engineering:** Compute derived features per-window: path straightness ratio (distance / path length), jitter variance, velocity distribution kurtosis. These statistical features catch the most obvious cheat signatures.
 
-2. **Model Architecture (Achievable in 48 Hours):**
-   - **Primary Model — Convolutional Autoencoder:**
-     - Encoder: `Conv1D(8→32, k=5) → ReLU → Conv1D(32→16, k=3) → ReLU → Flatten → Dense(16)`
-     - Decoder: `Dense(16) → Reshape → ConvTranspose1D(16→32, k=3) → ReLU → ConvTranspose1D(32→8, k=5)`
-     - **Detection method:** Train on *human-only* input sequences. At inference, compute reconstruction error (MSE). Cheat inputs (unnaturally smooth, perfectly linear, zero-jitter) produce high reconstruction error → flagged as anomalous.
-     - **Why autoencoder over a classifier:** No labeled "cheat" data needed for training. We train on human data only. Anything the model *can't reconstruct* is suspicious.
-   - **Secondary Model — Statistical Feature Classifier (Fallback):**
-     - Lightweight `Dense(6→32→16→2)` classifier operating on the per-window statistical features.
-     - Trained on labeled synthetic data: human vs. scripted cheat trajectories.
-     - Used as a fast fallback if the autoencoder is not ready in time.
-   - **Final output:** Ensemble both scores → `{ isHuman: boolean; confidence: number; anomalyScore: number }`.
+1. **Data Ingestion & Tokenization:**
+   - **Input Stream:** Capture DOM mouse/keyboard events at native browser event rate (~60–120Hz). Each event produces a feature vector: `[delta_time_ms, dx, dy, velocity, acceleration, angular_velocity, jitter, mouse_btn_state, keys_bitmask, path_curvature]` (10 features).
+   - **Temporal Tokenization:** Each input event is projected through a learned `Dense(10→64)` embedding layer, producing a 64-dimensional token. A 2-second window at 60Hz = 120 tokens = one input sequence.
+   - **Positional Encoding:** Sinusoidal positional encoding (standard Transformer PE) applied to the token sequence to preserve temporal ordering.
+   - **Feature Engineering (supplementary):** Per-window statistical features are also computed as auxiliary inputs: path straightness ratio, jitter variance, velocity kurtosis, reaction time distribution, click-to-kill timing. These feed into a secondary classification head.
 
-3. **Training Data Strategy (Critical — This Is How We Ship a Real Model):**
-   - **Human data:** Captured live during development. Every team member spends 15 minutes interacting with the GameplayTestPanel (see §5), generating ~54,000 human input events. Augmented with open-source mouse dynamics datasets (Balabit Mouse Dynamics Dataset, DFL Dataset).
-   - **Cheat data (synthetic):** Generated programmatically via `src/ai/cheatSimulator.ts`:
-     - `aimbot` — linear interpolation from current position to target at constant velocity, zero jitter
-     - `triggerBot` — human-like movement with inhuman reaction time (< 50ms snap-to-target)
-     - `spinBot` — constant angular velocity rotation, uniform speed
-     - `macroBot` — perfectly periodic click patterns with zero variance
-   - **Training script:** `scripts/trainModel.py` — PyTorch script, trains in < 10 minutes on CPU, exports to ONNX with Int8 quantization. Final model size target: < 5MB.
+2. **Model A Architecture — Behavioral Transformer (~5–10M parameters):**
+   - **Configuration:**
+     - `d_model = 64`, `n_heads = 4`, `n_layers = 6`, `d_ff = 256`, `max_seq_len = 128`
+     - Causal attention mask (decoder-only, like GPT)
+     - Total parameters: ~5–8M depending on final layer sizes
+   - **Dual Output Heads:**
+     - **Head 1 — Next-Event Prediction (Pre-training task):** Predict the probability distribution of the next input vector given the preceding sequence. Trained with MSE loss on continuous features. At inference, compute the *surprise score*: how far the actual next event deviates from the model's prediction. Consistent high surprise = non-human behavior.
+     - **Head 2 — Anomaly Classification (Fine-tuning task):** Binary classifier head on the `[CLS]` token equivalent (final hidden state). Fine-tuned with cross-entropy loss on labeled clean/cheat sequences. Outputs `P(cheat)` directly.
+   - **Final Score:** Weighted ensemble of surprise score (Head 1) and cheat probability (Head 2): `anomalyScore = 0.4 * surprise + 0.6 * P(cheat)`.
 
-4. **Inference Pipeline:**
-   - Load ONNX model in browser via `onnxruntime-web` (WASM execution provider, WebGL as fallback).
-   - Inference latency target: < 50ms per window on a modern laptop.
-   - Runs on a `requestAnimationFrame` loop, scoring every ~1 second of accumulated input.
+3. **Training Strategy (Overnight Saturday — GPU Required):**
 
-## 3B. Behavioral Mesh Analysis (Cross-Player Detection) ⭐ UNIQUE DIFFERENTIATOR
+   **Phase 1: Data Collection (Saturday morning, ~2 hours)**
+   - **Human data (real):** Each team member records 30 minutes of mouse/keyboard interaction in the GameplayTestPanel → ~108,000 events per person × 3 people = **~324,000 human events**.
+   - **Human data (open-source):** Download and preprocess the Balabit Mouse Dynamics Dataset (~3.6M mouse events from 10 users), DFL Keystroke Dataset, and any available FPS replay datasets (CS:GO demo parser → input stream converter).
+   - **Combined human dataset target: 2–5 million input events.**
+   - **Cheat data (synthetic, large-scale):** `scripts/generateCheatData.py` generates 500,000+ cheat events across multiple profiles:
+     - `aimbot_perfect` — zero-jitter linear snap to target
+     - `aimbot_humanized` — adds Gaussian noise to trajectories but maintains inhuman reaction times and path straightness
+     - `triggerbot` — human-like aim with < 30ms reaction clicks when crosshair passes target
+     - `spinbot` — constant angular velocity, sometimes with random speed variation
+     - `recoil_script` — perfectly compensated recoil patterns (frame-perfect downward pull)
+     - `macro_bot` — periodic input patterns with < 1ms jitter variance
+     - `wallhack_aim` — aim direction correlated with invisible player positions (uses mesh simulation)
+   - **Combined cheat dataset target: 500K–1M synthetic cheat events.**
 
-**Goal:** This is what makes ZK-Guard different from every other anticheat. Traditional anticheats only analyze one player at a time. Behavioral Mesh Analysis builds a **spatial knowledge graph** across all players in a session and detects when a player's inputs reveal knowledge they *shouldn't have* — the defining signature of wallhacks and ESP.
+   **Phase 2: Pre-training (Saturday night, ~4–6 hours on GPU)**
+   - Pre-train the Transformer on the full human dataset using next-event prediction (self-supervised). This teaches the model the statistical structure of human motor behavior.
+   - Training infrastructure: PyTorch + HuggingFace Trainer, 1x NVIDIA GPU (RTX 3080+ or cloud GPU via Lambda/RunPod).
+   - Hyperparameters: `lr=3e-4`, `batch_size=64`, `epochs=50`, `warmup_steps=1000`, cosine LR schedule.
+   - Checkpoint saved every 10 epochs. Best model selected by validation loss on held-out human data.
 
-**How It Works:**
-1. **Spatial Graph Construction:** Each player is a node. Edges represent **line-of-sight visibility** computed from position + orientation + level geometry (simplified as raycast against obstacle bitmask).
-2. **Knowledge Score:** For each player, compute: *"Is this player's aim direction / movement direction correlated with the position of players they CANNOT see?"* A high correlation = the player has information they shouldn't → ESP/wallhack detected.
-3. **Implementation:**
-   - `src/ai/meshAnalyzer.ts`:
-     - `BehavioralMesh` class maintains a graph of `PlayerNode` objects.
-     - `updatePlayerState(playerId, x, y, z, pitch, yaw)` — updates the graph.
-     - `computeVisibilityEdges()` — recalculates line-of-sight between all player pairs.
-     - `computeKnowledgeAnomaly(playerId)` — returns a `knowledgeScore: number` (0–1). High score = aiming at / moving toward invisible players.
-   - `src/ai/meshVisualizer.ts` — renders a real-time 2D top-down minimap showing:
-     - Player positions as colored dots
-     - Visibility cones as translucent arcs
-     - Knowledge anomaly edges as red lines connecting a player to targets they're tracking but can't see
-     - This visualization is the **money shot** for the demo video
+   **Phase 3: Fine-tuning (Sunday morning, ~1–2 hours)**
+   - Fine-tune the classification head (Head 2) using contrastive learning on labeled clean/cheat pairs.
+   - Loss function: Binary Cross-Entropy + Triplet Margin Loss (anchor=human, positive=human, negative=cheat).
+   - Freeze the Transformer backbone for first 5 epochs, then unfreeze last 2 layers for final 10 epochs.
 
-4. **Demo Integration:** The GameplayTestPanel simulates a 4-player session. In "Wallhack Mode" (see cheat simulator), the local player's aim tracks hidden players. The mesh visualizer shows the red anomaly edges appearing in real-time.
+   **Phase 4: Export**
+   - Export to ONNX via `torch.onnx.export()`.
+   - Apply mixed Int8/Float16 quantization via ONNX Runtime quantization tools.
+   - Target model size: **20–50MB** (small enough for browser, large enough to impress judges).
+   - Validate ONNX inference output matches PyTorch output within tolerance < 0.01.
+
+4. **Inference Pipeline (Browser):**
+   - Load ONNX model via `onnxruntime-web` with WebGL execution provider (primary) and WASM fallback.
+   - Streaming model load during wallet connection phase to hide latency.
+   - Inference latency target: **< 100ms per 2-second window** on a modern laptop with WebGL.
+   - Continuous scoring via `setInterval` every 2 seconds. Maintains a rolling anomaly score over the last 10 windows.
+
+## 3B. GNN-Powered Behavioral Mesh Analysis (Cross-Player Detection) ⭐ UNIQUE DIFFERENTIATOR
+
+**Goal:** This is what makes ZK-Guard fundamentally different from Vanguard, EAC, BattlEye, and every other anticheat in existence. Traditional anticheats analyze one player at a time. ZK-Guard's Behavioral Mesh uses a **trained Graph Attention Network (GAT)** that takes the entire player session as a graph and *learns* to detect when a player's behavior reveals impossible spatial knowledge — the defining signature of wallhacks, ESP, and information-sharing cheats.
+
+**Why a GNN Beats a Heuristic Correlation:**
+- A heuristic "dot-product correlation between aim direction and hidden player position" is easily defeated by adding random look-around noise.
+- A trained GAT *learns* the complex, non-linear relationship between spatial awareness and aim behavior across *thousands* of simulated sessions. It catches subtle patterns that no hand-crafted rule can express.
+- The GAT can also detect *collaborative cheating* — two players whose behaviors are suspiciously coordinated despite no apparent communication channel.
+
+**Technical Specifications:**
+
+1. **Graph Structure:**
+   - **Nodes:** Each player in the session. Node features: `[x, y, z, pitch, yaw, velocity_x, velocity_y, velocity_z, aim_delta_x, aim_delta_y, health, is_visible_to_i]` (12 features per node, per frame).
+   - **Edges:** Fully connected graph (every player pair). Edge features: `[distance, angle_from_aim, is_line_of_sight, time_since_last_visible]` (4 features per edge).
+   - **Temporal stacking:** 30 frames (~0.5s) of graph snapshots stacked as a temporal sequence, giving the GAT both spatial AND temporal context.
+
+2. **Model B Architecture — Temporal Graph Attention Network (~2–5M parameters):**
+   - **Per-Frame GAT Block:** 2-layer GAT with 4 attention heads each. Node features → attention-weighted aggregation → updated node representations.
+   - **Temporal Aggregation:** The sequence of 30 per-frame GAT outputs is fed through a small 2-layer Transformer (same architecture as Model A but with `d_model=32, n_layers=2`) to capture temporal evolution of the spatial relationships.
+   - **Output Head:** Per-node classification: `knowledgeScore: number (0–1)`. High score = this player's behavior reveals impossible spatial knowledge.
+   - **Session-Level Output:** Max-pool across all player knowledge scores → `sessionAnomalyScore`.
+
+3. **Training Strategy:**
+   - **Synthetic session generation:** `scripts/generateMeshData.py` creates thousands of simulated 4–10 player sessions:
+     - **Clean sessions:** Players navigate a simple 2D map with obstacles. Aim direction correlated ONLY with visible targets. Movement follows pathfinding between objectives.
+     - **Wallhack sessions:** One player's aim direction is correlated with ALL player positions, including those behind walls. Subtle versions add noise and delayed reactions to mimic realistic wallhack usage.
+     - **ESP sessions:** Player movement patterns pre-react to enemy positions before line-of-sight is established.
+     - **Collaborative cheat sessions:** Two players exhibit coordinated flanking behavior that's statistically improbable without shared information.
+   - **Dataset size: 10,000+ simulated sessions** (each 30–120 seconds, sampled at 60Hz).
+   - **Training:** PyTorch Geometric (PyG), `GATConv` layers, same GPU as Model A. Trains in ~2–3 hours.
+   - **Export:** ONNX via `torch.onnx.export()` with dynamic axes for variable player counts. Int8 quantization. Target size: **10–20MB**.
+
+4. **Why This Is Better Than Vanguard:**
+
+   | Capability | Vanguard / EAC / BattlEye | ZK-Guard |
+   |---|---|---|
+   | **Kernel access** | ✅ Ring-0 driver, reads all memory | ❌ No kernel access. Browser-only. |
+   | **Data sent to server** | ✅ Telemetry beamed to Riot/EA | ❌ Nothing leaves the device. ZK proof only. |
+   | **Individual input analysis** | ✅ Server-side ML on input streams | ✅ Transformer sequence model (local) |
+   | **Cross-player analysis** | ❌ Players analyzed independently | ✅ **GNN Behavioral Mesh** — session-level graph analysis |
+   | **Collaborative cheat detection** | ❌ Not addressed | ✅ GAT detects coordinated behavior anomalies |
+   | **Privacy** | ❌ Total surveillance | ✅ Zero-knowledge proof. Game dev sees boolean only. |
 
 **Deliverables (Combined §3A + §3B):**
-- `src/ai/modelLoader.ts` wrapping `onnxruntime-web` to load the `anticheat-model.onnx` file asynchronously.
-- `src/ai/featureExtractor.ts` to convert raw DOM mouse/keyboard events into `Float32Array` tensors formatted as `[batch, sequence_length, features]`, plus statistical feature computation.
-- `src/ai/behaviorAnalyzer.ts` with:
-  - `BehaviorResult` type: `{ isHuman: boolean; confidence: number; anomalyScore: number; knowledgeScore: number; sessionId: string; }`.
+- `src/ai/modelLoader.ts` — wraps `onnxruntime-web` to load both `behavioral-transformer.onnx` (~20–50MB) and `mesh-gat.onnx` (~10–20MB) asynchronously with progress callbacks.
+- `src/ai/tokenizer.ts` — converts raw DOM mouse/keyboard events into Transformer-compatible token sequences: `[batch, seq_len, d_model]` tensors.
+- `src/ai/featureExtractor.ts` — computes supplementary statistical features per-window (path straightness, jitter variance, reaction time distribution, velocity kurtosis).
+- `src/ai/behaviorAnalyzer.ts`:
+  - `BehaviorResult` type: `{ isHuman: boolean; confidence: number; anomalyScore: number; surpriseScore: number; knowledgeScore: number; sessionId: string; }`.
   - `BehaviorAnalyzer` class:
     - Maintains a sliding window buffer of the last N input events.
-    - `analyze()` — runs the autoencoder forward pass, computes reconstruction error, queries the `BehavioralMesh` for knowledge anomaly, ensembles both signals, returns `BehaviorResult`.
-- `src/ai/meshAnalyzer.ts` — Behavioral Mesh spatial graph (described above).
-- `src/ai/meshVisualizer.ts` — Canvas-based 2D minimap renderer for the mesh.
+    - `analyze()` — runs the Transformer forward pass (next-event prediction + classification heads), queries the Behavioral Mesh GAT for knowledge anomaly, ensembles all signals, returns `BehaviorResult`.
+- `src/ai/meshAnalyzer.ts` — Behavioral Mesh powered by the trained GAT:
+  - `BehavioralMesh` class maintains a graph of `PlayerNode` objects with full spatial state.
+  - `updatePlayerState(playerId, x, y, z, pitch, yaw)` — updates graph nodes.
+  - `computeVisibilityEdges()` — recalculates line-of-sight between all player pairs.
+  - `analyzeGraph()` — serializes the graph to a tensor, runs GAT inference via ONNX, returns per-player `knowledgeScore`.
+- `src/ai/meshVisualizer.ts` — Canvas-based 2D top-down minimap renderer:
+  - Player positions as colored dots with directional aim indicators
+  - Visibility cones as translucent arcs
+  - **Knowledge anomaly edges** as animated red lines (pulse when score is high)
+  - Per-player knowledge score as floating labels
+  - This visualization is the **demo's visual proof** that the AI is doing something no other anticheat does
 - `src/ai/cheatSimulator.ts` — programmatic cheat trajectory generators:
-  - `simulateAimbot(targetX, targetY)` → linear snap trajectory
-  - `simulateWallhack(hiddenPlayerPositions)` → aim tracking through walls
+  - `simulateAimbot(targetX, targetY, humanization?)` → linear snap trajectory, optionally with noise
+  - `simulateWallhack(hiddenPlayerPositions, reactionDelay?)` → aim tracking through walls
   - `simulateSpinbot()` → constant-velocity rotation
-  - `simulateHuman()` → replay captured human data with slight noise
-- `scripts/trainModel.py` — PyTorch training script (autoencoder + optional classifier).
+  - `simulateHumanizedAimbot()` → realistic aim with inhuman reaction time distribution
+  - `simulateCollabCheat(partnerPositions)` → coordinated movement patterns
+  - `simulateHuman()` → replay captured human data with augmentation noise
+- `scripts/generateCheatData.py` — large-scale synthetic cheat data generator (500K+ events).
+- `scripts/generateMeshData.py` — synthetic session generator for GNN training (10K+ sessions).
+- `scripts/trainTransformer.py` — PyTorch training script for Model A (Behavioral Transformer). Pre-train + fine-tune pipeline.
+- `scripts/trainGAT.py` — PyTorch Geometric training script for Model B (Mesh GAT).
+- `scripts/exportONNX.py` — export both models to ONNX with quantization and validation.
 - `src/ai/behaviorAnalyzer.test.ts` — unit tests:
-  - Human input → `isHuman: true`, low anomaly score.
-  - Aimbot simulation → `isHuman: false`, high anomaly score.
-  - Wallhack simulation → `isHuman: false`, high knowledge score.
+  - Human input → `isHuman: true`, low anomaly + surprise scores.
+  - Perfect aimbot → `isHuman: false`, high anomaly score.
+  - Humanized aimbot (with noise) → `isHuman: false` — **this is the key test that proves the Transformer catches what an autoencoder misses**.
+  - Wallhack simulation → `isHuman: false`, high knowledge score from GAT.
+  - Collaborative cheat → both players flagged by mesh analysis.
   - Clean local input, clean spatial state → all scores green.
 
 **Acceptance criteria:**
-- Trained model size is `< 5MB` and loads via `onnxruntime-web` in under 2 seconds.
-- Inference for a single window takes `< 50ms` in Chrome on a standard laptop.
-- Aimbot and wallhack simulations are detected with > 90% accuracy on synthetic test set.
-- Clean human input passes with `isHuman: true` and confidence > 70.
+- Combined model size is **< 70MB** and loads via `onnxruntime-web` in under 5 seconds (streamed during wallet connection).
+- Transformer inference for a single 2-second window takes **< 100ms** in Chrome with WebGL.
+- GAT inference for a 4-player graph takes **< 50ms**.
+- **Perfect aimbot detected with > 99% accuracy** on synthetic test set.
+- **Humanized aimbot detected with > 85% accuracy** — this proves the Transformer's temporal reasoning.
+- **Wallhack detected with > 90% accuracy** via GNN mesh analysis.
+- Clean human input passes with `isHuman: true` and confidence > 80.
 - Behavioral Mesh visualizer renders in real-time without frame drops.
-- **Cheat simulation toggle in the demo UI works smoothly** (this is the key demo moment).
+- **Cheat simulation toggle in the demo UI works smoothly** (key demo moment).
 - Zero reliance on external backend server API calls for inference.
 
-**Dependencies:** None. Can build in parallel with §2. Training data from team members collected Saturday morning.
+**Dependencies:** GPU access for overnight training (RTX 3080+ or cloud GPU). Can build inference pipeline in parallel with §2. Training data collected Saturday morning. Models trained Saturday night → Sunday morning.
 
 **Technical notes + risks:**
-- **Risk:** Autoencoder may not generalize beyond training team's input style. **Mitigation:** Augment training data with the Balabit dataset. For the demo, the synthetic cheat signatures (zero-jitter linear paths, constant angular velocity) are SO different from human input that even a weak model catches them trivially.
-- **Risk:** ONNX Runtime Web WASM can be slow on first load. **Mitigation:** Pre-warm the model during the wallet connection step (load ONNX while user clicks "Connect Lace Wallet").
-- **Risk:** Behavioral Mesh requires simulated multiplayer data. **Mitigation:** The demo runs a 4-player simulation with scripted bot paths. We don't need a real multiplayer server — the mesh operates on position/orientation data regardless of source.
-- **Fallback plan:** If ONNX inference is too slow or the autoencoder doesn't converge, the statistical feature classifier alone can catch aimbot signatures (path straightness ratio < 0.1 is an instant flag). This is ugly but ships.
+- **Risk:** Transformer pre-training takes longer than expected. **Mitigation:** Start training Saturday 6pm and let it run overnight. If the model hasn't converged by Sunday 8am, use the best checkpoint available — even a partially trained Transformer outperforms an autoencoder on temporal patterns. The classification head fine-tuning only takes 1–2 hours.
+- **Risk:** ONNX Runtime Web WebGL can be slow on older hardware. **Mitigation:** Test on the actual demo machine Saturday night. If WebGL inference is too slow, fall back to WASM (slower but more compatible). Reduce `max_seq_len` to 64 if needed.
+- **Risk:** GNN training on synthetic mesh data may not transfer perfectly. **Mitigation:** The synthetic session generator is configurable. If the GAT underperforms, increase the diversity of cheat profiles in the training data. The heuristic correlation score remains as a lightweight fallback — but the trained GAT should massively outperform it.
+- **Risk:** Combined model size (60–70MB) is large for browser load. **Mitigation:** Stream both models during wallet connection using `fetch` with `ReadableStream`. Show a progress bar. Most users on modern connections can download 70MB in < 10 seconds. Aggressive Int8 quantization can reduce this to ~30MB with minimal accuracy loss.
+- **Risk:** PyTorch Geometric (PyG) dependency for GNN training. **Mitigation:** Install PyG in a conda environment Saturday morning. If PyG installation fails on the training machine, implement the GAT manually using base PyTorch `nn.Module` — it's only 2 attention layers.
+- **Fallback plan:** If both deep learning models fail to train or export, a statistical feature classifier (path straightness, jitter, reaction time thresholds) combined with the heuristic mesh correlation can still detect blatant cheats. This is the absolute floor — it ships but won't win the AI track.
 
 ---
 
@@ -460,7 +535,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 |---|---|---|---|
 | 1 | ~~Single vs. two-input circuit~~ | Dev A | ✅ **RESOLVED — single boolean.** |
 | 2 | Session ID scheme: `crypto.randomUUID()` vs. `keccak256(wallet + timestamp)` | Dev A + Dev B | §2/§4 interface agreement, Friday night |
-| 3 | ~~AI model architecture~~ | Dev B | ✅ **RESOLVED — Autoencoder + anomaly detector.** |
+| 3 | ~~AI model architecture~~ | Dev B | ✅ **RESOLVED — Dual deep learning pipeline.** Transformer sequence model (5–10M params) + Graph Attention Network for Behavioral Mesh (2–5M params). Trained overnight Saturday on GPU. |
 | 4 | ARM Mac compatibility for Midnight Docker images | Dev A | §1 Friday night — if blocked, assign Proof Server to Intel machine |
 | 5 | Lace Wallet compatibility on Brave vs. Chrome | Dev C | §1/§5 Friday night browser test |
 | 6 | Demo: real proof or mock mode for video recording | All | §6 Sunday morning based on pipeline stability |
@@ -468,7 +543,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 ## Risks Roll-Up (Top 5)
 
 1. **Compact circuit compile failure or API mismatch** — Midnight devnet tooling is pre-production. If `compact compile` fails or the `Proof<T>` API doesn't match the docs, the entire proof pipeline is blocked. Mitigation: Dev A validates the simplified single-boolean circuit by end of Friday night. If blocked, mock the proof server call for the demo.
-2. **Autoencoder training doesn't converge** — the model may not learn a useful representation from limited human data. Mitigation: the statistical feature classifier (path straightness, jitter variance) works as a deterministic fallback and catches aimbot signatures trivially. The demo works either way.
+2. **Transformer / GNN training fails or doesn't converge overnight** — deep learning models are sensitive to hyperparameters and data quality. Mitigation: (a) checkpoint every 10 epochs, use best checkpoint even if training is incomplete, (b) a partially-trained Transformer still outperforms an autoencoder on temporal patterns, (c) statistical feature classifier remains as an absolute-floor fallback. Start training by Saturday 6pm to maximize training time.
 3. **Lace Wallet devnet mode not functional** — Lace may require specific Midnight devnet configuration flags. Mitigation: test wallet connection before writing any contract code. If wallet connection fails, the signing step can be bypassed with a pre-signed tx for demo purposes.
 4. **Proof generation latency > 60 seconds** — makes the demo awkward and video pacing impossible. Mitigation: the circuit is now minimal (single boolean). Pre-warm the Proof Server before recording. Use mock mode for the video if latency is > 30s.
 5. **Cheat simulation toggle doesn't demo well** — if the AI scores don't visibly change when toggling modes, the demo loses its impact. Mitigation: test the toggle flow 10+ times before recording. Ensure the heatmap, scores, and mesh visualization update in real-time. This is the most important demo rehearsal item.
@@ -477,7 +552,7 @@ Each numbered section below = one discrete build task assignable to a team membe
 
 The full ZK-Guard demo is done when:
 - A new user on Chrome with Lace Wallet installed can: connect wallet → move mouse naturally → see the AI score it as clean → toggle Aimbot/Wallhack mode → watch the AI catch it in real-time → toggle back to Human → run verification → watch proof generate locally → see the Verified Clean Player badge → see a simulated game developer query return `true` — **in under 90 seconds, with zero console errors, on the demo machine.**
-- The cheat simulation toggle produces **visibly different** AI scores, heatmap patterns, and Behavioral Mesh states.
+- The cheat simulation toggle produces **visibly different** AI scores (including Transformer surprise score and GNN knowledge score), heatmap patterns, and Behavioral Mesh states.
 - The on-chain `isVerified(sessionId)` query (against the real GraphQL Indexer, not a mock) returns `true`.
 - The raw input data, anomaly scores, and mesh graph are verifiably absent from the transaction body (show this in the demo — inspect the tx in the Midnight block explorer or via GraphQL).
 - The pitch video is recorded with the story-driven structure and the three technical moat bullets are locked.
