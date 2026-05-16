@@ -1,558 +1,557 @@
 # ZK-Guard — Product Requirements Document
 
-**Tagline:** AI-powered anticheat with zero-knowledge proof privacy on Midnight.
+**Tagline:** Server-side AI anticheat — as accurate as Vanguard, zero invasion of your machine, privacy-proven on Midnight.
 
-**The Problem:** Traditional anticheats demand kernel-level access to your entire machine — reading memory, scanning processes, fingerprinting hardware — and beam all of that telemetry to centralized servers. Players sacrifice total privacy for the right to play.
+**The Problem:** Today's anticheats (Vanguard, EAC, BattlEye) install kernel-level drivers on your PC — reading memory, scanning processes, fingerprinting hardware — and beam raw telemetry to centralized servers. Players sacrifice total privacy for the right to play. Game developers are forced to choose between invasive surveillance and rampant cheating.
 
-**The Solution:** ZK-Guard runs a local behavioral AI model that analyzes mouse, keyboard, and controller input in real-time, cross-references it against the spatial behavior of other players in the session ("Behavioral Mesh Analysis"), and outputs a single boolean: *clean* or *cheating*.
-
-**How It Works:** That boolean is fed as a private witness into Midnight's local Proof Server, which generates a ZK proof. A Compact smart contract verifies the proof on-chain and issues a "Verified Clean Player" session badge — without ever exposing the user's raw telemetry, game state, or device fingerprint to the ledger or the game developer.
+**The Solution:** ZK-Guard is a **server-side anticheat service** that any multiplayer game can integrate in under 10 lines of code. Game servers send lightweight telemetry (positions, aim angles, events) to ZK-Guard's AI engine via a universal REST/WebSocket API. A Transformer sequence model analyzes each player's behavior for inhuman patterns, while a Graph Attention Network analyzes the session's player graph for impossible spatial knowledge. A professional dashboard shows **live visual detection** with individually toggleable modules. A Midnight ZK proof certifies the verdict on-chain without exposing raw game data.
 
 ---
 
-## 0. Tech Stack (Locked Decisions)
+## Why This Is Better Than Vanguard
 
-| Layer | Choice | Rationale |
+| Capability | Vanguard / EAC / BattlEye | ZK-Guard |
 |---|---|---|
-| Smart contracts | **Compact** (Midnight DSL) | TypeScript-inspired ZK circuit language; the only supported language for Midnight's proof system. ZK logic (circuit + ledger state) lives here. |
-| Frontend framework | **React 18 + Vite + TypeScript** | HMR, TypeScript-native, no SSR needed for a demo SPA. Plays well with Midnight.js. |
-| Blockchain SDK | **@midnight-ntwrk/compact-js** + **@midnight-ntwrk/dapp-connector-api** | Official Midnight SDK. compact-js wraps compiled contracts; dapp-connector-api brokers Lace wallet connection. |
-| Wallet | **Lace Wallet** (Midnight-enabled build) | Only wallet with Midnight shard support. Required for signing `mintBadge` transactions. |
-| Local infrastructure | **Docker** (Midnight Node + GraphQL Indexer + Proof Server) | Local proof generation is non-negotiable — raw telemetry must never leave the device. All three services run via `docker compose up`. |
-| AI Model Architecture | **Dual-Model Deep Learning Pipeline** | **Model A:** Fine-tuned Transformer sequence model (~5-10M params) trained via next-event prediction on behavioral input streams. Detects aimbots, macros, and inhuman reaction times through temporal probability analysis. **Model B:** Graph Attention Network (GAT) for Behavioral Mesh — learns spatial awareness anomalies across all players in a session. Both exported to ONNX, run locally in-browser. |
-| Behavioral Mesh | **GNN-Powered Cross-Player Spatial Anomaly Graph** | Unique differentiator: a trained Graph Attention Network correlates each player's inputs against what they *should* be able to see/know based on other players' positions. Learns normal vs. impossible awareness patterns — not just heuristic correlation, but a *trained* understanding of spatial behavior at the session level. |
-| AI Inference Engine | **ONNX Runtime Web (WASM/WebGL)** | Cross-platform, fast local inference inside the browser. Handles models up to ~100MB via streaming load + WebGL acceleration. No server API calls. |
-| Styling | **Tailwind CSS** | Utility speed for demo UI. No design system ceremony needed for a hackathon. |
-| Package manager | **pnpm** | Workspace support; faster installs than npm for a monorepo. |
+| Installed on player's PC | ✅ Kernel-level driver | ❌ **Nothing. Zero local footprint.** |
+| Reads player's memory/files | ✅ Full system scan | ❌ Never touches the machine |
+| Data sent to corp servers | ✅ Raw telemetry | ❌ ZK proof only — raw data stays private |
+| Per-player input analysis | ✅ Server-side ML | ✅ Transformer sequence model |
+| Cross-player session analysis | ❌ Players analyzed independently | ✅ **GNN Behavioral Mesh** (unique) |
+| Game-agnostic integration | ❌ Custom per-game SDK | ✅ **10-line REST/WebSocket API** |
+| Paid tools required | ✅ Licensed per-title | ❌ **100% free & open-source stack** |
+| Verifiable on-chain | ❌ Opaque verdicts | ✅ Midnight ZK proof, publicly verifiable |
 
-**⚠ Unresolved decisions (flagged inline):**
-- ✅ **Compact circuit inputs:** **RESOLVED — single boolean witness (`isHuman: Boolean`).** Confidence is shown in the UI only. This minimizes circuit compile risk and proof latency.
-- 🚩 **Session ID scheme:** wallet address hash vs. client-generated UUID. Affects replay-attack surface. Decided in §2 / §4 interface agreement.
-- ✅ **Model architecture:** **RESOLVED — Dual deep learning pipeline.** (1) Transformer sequence model for individual input anomaly detection, (2) Graph Attention Network for cross-player Behavioral Mesh. Both trained overnight Saturday on GPU, exported to ONNX for browser inference.
+---
+
+## Integration: How Any Game Plugs In (< 10 Lines)
+
+ZK-Guard requires **zero client-side code**. The game server sends tick data via WebSocket or REST. Works with Unity, Unreal, Godot, custom engines — anything that can make an HTTP call.
+
+**WebSocket (recommended for real-time games):**
+```python
+# Python game server — 6 lines to integrate
+import websockets, json
+
+async def send_tick(ws, match_id, players, events):
+    await ws.send(json.dumps({
+        "tick": tick_counter, "timestamp_ms": now_ms(),
+        "match_id": match_id,
+        "players": players,  # list of {player_id, position, velocity, aim, health}
+        "events": events     # list of {player_id, event_type, timestamp_ms}
+    }))
+
+ws = await websockets.connect(f"ws://zkguard-host:8000/telemetry/{match_id}")
+```
+
+**REST (for turn-based / lower-frequency games):**
+```bash
+# Any language — single POST per tick
+curl -X POST http://zkguard-host:8000/api/tick \
+  -H "Content-Type: application/json" \
+  -d '{"match_id":"abc","tick":1,"players":[...],"events":[...]}'
+```
+
+**Detection results callback:**
+```python
+# Game server receives verdicts via webhook or polling
+GET /api/verdict/{match_id}/{player_id}
+# Returns: {"verdict":"cheating","confidence":0.94,"modules":{"aim":0.97,"wallhack":0.02}}
+```
+
+**No paid tools. No SDK license. No client install. Just HTTP.**
+
+---
+
+## Tech Stack (100% Free & Open-Source)
+
+| Layer | Choice | Cost | Rationale |
+|---|---|---|---|
+| AI Backend | **Python 3.11 + FastAPI + PyTorch** | Free | Native ML ecosystem. Async WebSocket ingestion. |
+| Frontend | **React 18 + Vite + TypeScript** | Free | Real-time dashboard SPA. |
+| Visualization | **Recharts + D3.js + HTML5 Canvas** | Free | Rich charts, graphs, animated minimap. No paid charting libs. |
+| Smart Contracts | **Compact** (Midnight DSL) | Free | ZK circuit + ledger state for on-chain badge. |
+| Blockchain SDK | **@midnight-ntwrk/compact-js** | Free | Official Midnight SDK. |
+| Midnight Infra | **Docker** (Node + Indexer + Proof Server) | Free | Local devnet via `docker compose up`. |
+| AI Models | **PyTorch (Transformer ~5M + GAT ~2M params)** | Free | Trained on synthetic data we generate ourselves. |
+| Styling | **Tailwind CSS** | Free | Fast utility styling. |
+| Package Manager | **pnpm** (frontend) + **pip** (backend) | Free | Monorepo: `/server` + `/dashboard`. |
+
+> **Zero paid tools.** No API keys, no licensed SDKs, no cloud subscriptions required. Everything runs locally on free, open-source software.
 
 ---
 
 ## Build Phase Map
 
-- **Phase 1:** Local infrastructure (§1) — Docker services running before any contract or frontend code.
-- **Phase 2:** Compact smart contract (§2) — compile + deploy before wiring the SDK.
-- **Phase 3:** AI Anticheat + Deep Behavioral Mesh (§3) — Transformer sequence model training, GNN mesh training, ONNX export, and browser inference pipeline.
-- **Phase 4:** SDK integration layer (§4) — Midnight.js glue between AI output and on-chain tx.
-- **Phase 5:** React frontend (§5) — demo UI wiring phases 1–4 together.
-- **Phase 6:** Integration, demo polish, video (§6) — end-to-end happy path, then recording.
+| Phase | Section | What | Depends On |
+|---|---|---|---|
+| **Phase 1** | §1 | Universal Telemetry API | — |
+| **Phase 2** | §2 | AI Detection Engine (Transformer + GNN) | §1 |
+| **Phase 3** | §3 | Visual Detection Dashboard | §2 (can start with mocks) |
+| **Phase 4** | §4 | Midnight ZK Integration | §1 |
+| **Phase 5** | §5 | Match Simulator + Cheat Injection | §1, §2 |
+| **Phase 6** | §6 | Integration, Demo + Pitch | All |
 
-Each numbered section below = one discrete build task assignable to a team member. The critical path is §1 → §2 → §4 → §6; §3 and §5 can proceed in parallel.
+**Critical path:** §1 → §2 → §5 → §6. Phases §3 and §4 proceed in parallel.
 
 ---
 
-# PHASE 1 — LOCAL INFRASTRUCTURE
+# PHASE 1 — UNIVERSAL TELEMETRY API
 
-## 1. Docker Compose Stack
+## §1. Game-Agnostic Telemetry Ingestion
 
-**Goal:** Bring up the three local Midnight services — Node, GraphQL Indexer, and Proof Server — via a single `docker compose up`. Every subsequent section depends on these endpoints being stable.
+**Goal:** Build a WebSocket + REST server that accepts real-time game telemetry in a universal format. Any multiplayer game integrates by sending tick data matching our schema — no SDK, no client-side agent.
 
-**Deliverables:**
-- Repo root: `docker-compose.yml` with three named services:
-  - `midnight-node` — local devnet node, exposes port `9944` (RPC) and `9933` (WS).
-  - `proof-server` — Midnight local proof generator, exposes port `9432`. This is the service that runs ZK circuit evaluation. It is the most resource-intensive component.
-  - `graphql-indexer` — Midnight's chain indexer, exposes port `4000`. Provides the `isVerified(sessionId)` read endpoint for the game developer demo.
-- `.env.example` at repo root listing:
-  - `MIDNIGHT_NODE_URL=http://localhost:9944`
-  - `PROOF_SERVER_URL=http://localhost:9432`
-  - `INDEXER_URL=http://localhost:4000/graphql`
-  - `VITE_CONTRACT_ADDRESS=` (populated after §2 deploy)
-- `README.md` with verbatim startup commands:
-  ```bash
-  docker compose up -d
-  # Verify:
-  curl http://localhost:9432/health     # proof server
-  curl http://localhost:4000/graphql    # indexer playground
-  ```
+### Step 1.1 — Define Universal Schema
+
+`server/api/schema.py` — Pydantic models:
+```python
+class PlayerState(BaseModel):
+    player_id: str
+    position: Vec3          # x, y, z
+    velocity: Vec3          # vx, vy, vz
+    aim: AimAngles          # pitch, yaw
+    aim_delta: Vec2         # frame-to-frame aim change
+    state_flags: int        # bitmask: crouching, ADS, airborne, sprinting
+    health: float
+    visible_to: list[str]   # IDs of players who can see this player
+
+class GameEvent(BaseModel):
+    player_id: str
+    event_type: str         # fire, hit, kill, damage, reload, jump, ability
+    timestamp_ms: int
+    target_id: str | None
+    metadata: dict          # headshot, distance, weapon, damage, etc.
+
+class TickData(BaseModel):
+    tick: int
+    timestamp_ms: int
+    match_id: str
+    players: list[PlayerState]
+    events: list[GameEvent]
+```
+
+### Step 1.2 — WebSocket Ingestion Endpoint
+
+`server/api/ingest.py`:
+- `ws://localhost:8000/telemetry/{match_id}` — accepts TickData JSON
+- Validates against schema, rejects invalid messages with descriptive error
+- Buffers ticks into sliding windows (128 ticks = 1 analysis window at 64 tick/s)
+- Forwards detection results to dashboard clients
+
+### Step 1.3 — REST Ingestion Endpoint
+
+`server/api/rest_ingest.py`:
+- `POST /api/tick` — accepts same TickData JSON via HTTP
+- `GET /api/verdict/{match_id}/{player_id}` — returns latest detection verdict
+- Enables integration from any language/engine without WebSocket support
+
+### Step 1.4 — Dashboard WebSocket
+
+`server/api/dashboard_ws.py`:
+- `ws://localhost:8000/dashboard/{match_id}` — streams detection results to React UI
 
 **Acceptance criteria:**
-- `docker compose up` completes without error on a cold pull.
-- `curl http://localhost:9432/health` returns `{ "status": "ok" }`.
-- GraphQL Playground loads at `http://localhost:4000/graphql`.
-- All three containers stay running for 10 minutes without restart.
+- Server starts on port 8000, accepts WebSocket + REST connections
+- Telemetry at 64 ticks/sec ingested without error
+- Invalid messages rejected with descriptive error
+- Dashboard WebSocket streams detection data to connected clients
 
 **Dependencies:** None.
 
-**Technical notes + risks:**
-- Use official Docker images from `midnight-ntwrk` on Docker Hub. Pin image tags — `latest` can drift mid-hackathon.
-- Risk: Docker Desktop on macOS needs ≥ 6 GB RAM allocated; the Proof Server is memory-hungry. Verify in Docker Desktop → Settings → Resources before Friday night.
-- Risk: ARM (M1/M2 Mac) — not all Midnight images have `arm64` builds. Test with Rosetta 2 emulation (`platform: linux/amd64` in compose). If this blocks, fallback to a Linux VM or a teammate's Intel machine for the Proof Server only.
-- The GraphQL Indexer must fully sync before `isVerified` queries return correct results. On a fresh devnet this is near-instant; on a shared testnet it can lag.
+---
+
+# PHASE 2 — AI DETECTION ENGINE
+
+## §2A. Behavioral Transformer (Per-Player Analysis)
+
+**Goal:** Transformer sequence model analyzing each player's input stream for aimbots, macros, inhuman reaction times, speed hacks, and tracking anomalies.
+
+### Step 2A.1 — Model Architecture (~5M params)
+
+- `d_model=64, n_heads=4, n_layers=6, d_ff=256, max_seq_len=128`
+- Decoder-only (causal attention)
+- **Input:** 9 features per tick × 128 ticks: `[aim_delta_x, aim_delta_y, velocity, acceleration, angular_velocity, jitter, state_flags, event_flags, delta_time]`
+- **Dual heads:** (1) next-event prediction → surprise score, (2) anomaly classification → P(cheat)
+- **Output per player per window:** `{ aimScore, reactionScore, macroScore, speedScore, trackingScore, overallAnomaly, confidence }`
+
+### Step 2A.2 — Detection Modules (Model A)
+
+| Module | Catches | Visual Signal |
+|---|---|---|
+| 🎯 Aim Analysis | Aimbot, flick bot, silent aim | Path straightness plot, angular velocity spikes, snap markers |
+| ⚡ Reaction Time | Triggerbot, pre-fire | Reaction scatter plot, inhuman consistency bands |
+| 🤖 Macro Detection | Recoil scripts, bhop | FFT spectrum peaks, variance chart, click histogram |
+| 💨 Speed/Movement | Speed hack, teleport | Velocity graph with physics-limit overlay |
+| 🎯 Tracking | Smooth aim, lock-on | Crosshair-to-target correlation graph |
+
+## §2B. Behavioral Mesh GAT (Cross-Player Analysis)
+
+**Goal:** Graph Attention Network taking ALL players as a graph, detecting wallhacks, ESP, and collaborative cheating through impossible spatial knowledge.
+
+### Step 2B.1 — Model Architecture (~2M params)
+
+- 2-layer GAT, 4 attention heads per layer
+- Temporal aggregation via mini-Transformer (`d_model=32`)
+- **Nodes:** Each player (12 features: position, velocity, aim, health, visible_to_flags)
+- **Edges:** Fully connected (4 features: distance, angle_from_aim, is_LOS, time_since_visible)
+- **Output:** `knowledgeScore (0–1)` per player
+
+### Step 2B.2 — Detection Modules (Model B)
+
+| Module | Catches | Visual Signal |
+|---|---|---|
+| 👁 Wallhack / ESP | Acting on invisible info | Mesh minimap with red knowledge-anomaly edges |
+| 🤝 Collab Cheat | Ghosting, info sharing | Coordination heatmap, synchronized movement viz |
+
+## §2C. Training Pipeline (All Free Tools)
+
+### Step 2C.1 — Synthetic Data Generation
+
+- `scripts/generateCheatData.py` — 500K+ events across 7 cheat profiles (aimbot_perfect, aimbot_humanized, triggerbot, spinbot, recoil_script, macro_bot, wallhack_aim)
+- `scripts/generateMeshData.py` — 10K+ sessions with clean/wallhack/ESP/collab profiles
+- **No paid datasets.** All training data is synthetically generated.
+
+### Step 2C.2 — Model Training
+
+- `scripts/trainTransformer.py` — PyTorch training with cosine LR, checkpoints every 10 epochs
+- `scripts/trainGAT.py` — PyTorch Geometric training on synthetic sessions
+- **No cloud GPU required.** Models are small enough to train on a consumer GPU (RTX 3060+) or even CPU overnight.
+
+## §2D. Detection Fusion Engine
+
+`server/detection/engine.py`:
+- Combines Model A per-player + Model B cross-player scores
+- Per-player breakdown: confidence per module (aim, reaction, macro, speed, tracking, wallhack, collab)
+- Session verdict: `clean` / `suspicious` / `cheating` with confidence
+- Streams results via WebSocket to dashboard
+
+**Acceptance criteria:**
+- Perfect aimbot detected >99% on synthetic data
+- Humanized aimbot >85%, Wallhack >90% via GNN
+- False positive rate <5%
+- Detection results stream within 200ms of window completion
+
+**Dependencies:** §1.
 
 ---
 
-# PHASE 2 — COMPACT SMART CONTRACT
+# PHASE 3 — VISUAL DETECTION DASHBOARD
 
-## 2. ZK Circuit + Ledger State
+## §3. Professional Detection UI with Live Visuals
 
-**Goal:** Write, compile, and deploy the `zkguard.compact` contract to the local Midnight devnet. The contract must: (a) define a minimal circuit that proves the AI's clean/cheat boolean without exposing it, (b) write a badge to ledger state on successful proof verification, and (c) expose a read query for game developers. **Keep the circuit as simple as possible** — every minute debugging Compact syntax is a minute not spent on the AI demo.
+**Goal:** React dashboard displaying ALL detection data in real-time with animated, professional visualizations. Every detection module is independently toggleable. The dashboard is the **"wow moment"** for judges.
 
-**Deliverables:**
-- `contracts/zkguard.compact` implementing:
+### Step 3.1 — Dashboard Layout
 
-  ```compact
-  ledger {
-    verifiedSessions: Map<Bytes32, VerificationRecord>;
-  }
+`dashboard/src/components/DetectionDashboard.tsx`:
+- **Top bar:** Match info, player count, elapsed time, pulsing global threat level indicator
+- **Left sidebar:** 7 toggleable detection modules (each with animated ON/OFF switch)
+- **Center:** Active visualization panels (dynamically change based on active modules)
+- **Right sidebar:** Player score cards with mini-gauges, sortable by threat level
+- **Bottom:** Match timeline with color-coded detection event markers
 
-  struct VerificationRecord {
-    isVerified: Boolean;
-    timestamp:  Uint64;
-    sessionId:  Bytes32;
-  }
+### Step 3.2 — Visual Detection Modules (7 Toggleable Panels)
 
-  circuit verifyHumanity(
-    private isHuman:   Boolean,
-    public  sessionId: Bytes32
-  ): Boolean {
-    assert(isHuman == true);
-    return true;
-  }
+Each module is a self-contained visual panel with **animated, real-time charts:**
 
-  export transaction mintBadge(
-    proof:     Proof<verifyHumanity>,
-    sessionId: Bytes32
-  ): Void {
-    verify(verifyHumanity, proof, sessionId);
-    verifiedSessions.set(sessionId, VerificationRecord {
-      isVerified: true,
-      timestamp:  ledger.blockTime,
-      sessionId:  sessionId,
-    });
-  }
+| # | Component | Live Visual |
+|---|---|---|
+| 1 | `AimAnalysis.tsx` | **Animated aim trajectory** on 2D canvas — draws the player's crosshair path in real-time. Angular velocity line chart with red spike markers. Path straightness gauge with animated needle. Snap-to-target event markers pulse on detection. |
+| 2 | `WallhackDetection.tsx` | **Animated 2D minimap** (HTML5 Canvas) — all players as colored dots with directional aim cones. Visibility arcs as translucent wedges. **Red pulsing edges** between players when knowledge anomaly detected. Knowledge score bars per player. |
+| 3 | `SpeedHackDetection.tsx` | **Velocity line chart** with physics-limit overlay (red dashed line). Position delta scatter plot. Teleport flags as animated warning icons on the timeline. |
+| 4 | `MacroDetection.tsx` | **FFT frequency spectrum** (bar chart) — periodic peaks glow when macro detected. Input variance analysis chart. Click interval histogram with distribution overlay. |
+| 5 | `ReactionTimeAnalysis.tsx` | **Scatter plot** of per-kill reaction times — human range band (green), inhuman zone (red). Statistical distribution curve overlay. CDF curve comparison vs. human baseline. |
+| 6 | `TrackingAnalysis.tsx` | **Crosshair-to-hitbox correlation graph** — animated line showing how closely aim tracks target center. Lock-on duration bar chart. Smooth-aim probability gauge. |
+| 7 | `CollabCheatDetection.tsx` | **Player-pair coordination heatmap** — color intensity = coordination anomaly. Synchronized movement visualization. Info-flow directed graph with animated arrows. |
 
-  export query isVerified(sessionId: Bytes32): Boolean {
-    return verifiedSessions.lookup(sessionId)?.isVerified ?? false;
-  }
-  ```
+### Step 3.3 — Player Score Cards
 
-- `contracts/deploy.ts` — script using `@midnight-ntwrk/compact-js` to deploy the compiled contract to local devnet, print contract address, and write it to `.env`.
-- `contracts/smoke-test.ts` — script that submits a synthetic `mintBadge` tx with a hardcoded valid proof, then calls `isVerified` and asserts `true`. Required before any frontend work starts.
+`dashboard/src/components/PlayerScoreCard.tsx`:
+- Compact card per player with mini-gauge arcs for each detection type
+- Color-coded verdict badge: ✅ Clean (green pulse) / ⚠️ Suspicious (amber pulse) / ❌ Cheating (red pulse)
+- Click to expand → full per-module breakdown with historical trend graphs
+- **Animated transitions** when scores change — smooth color morphs, gauge animations
+
+### Step 3.4 — Match Timeline
+
+`dashboard/src/components/MatchTimeline.tsx`:
+- Horizontal scrollable timeline spanning match duration
+- Color-coded detection event markers by type and severity
+- Hover popover with event details
+- Zoom/scroll controls
+
+### Step 3.5 — Behavioral Mesh Minimap
+
+`dashboard/src/components/BehavioralMeshPanel.tsx`:
+- Full 2D top-down canvas minimap of the match
+- Players: colored dots with directional aim indicators
+- Visibility cones as translucent arcs
+- **Knowledge anomaly edges:** animated red pulsing lines between players
+- Real-time update from server telemetry stream at 16fps
+
+### Step 3.6 — ZK Badge Panel
+
+`dashboard/src/components/ZKBadgePanel.tsx`:
+- Midnight ZK proof status per player
+- Badge mint status, tx hash, session ID
+- Side-by-side: "What the game dev sees" (single boolean) vs. "What ZK-Guard analyzed" (all detection data — never shared)
+
+### Step 3.7 — WebSocket Hook
+
+`dashboard/src/hooks/useDetectionStream.ts`:
+- Connects to `ws://localhost:8000/dashboard/{matchId}`
+- Manages real-time state for all modules
+- Exports: `{ players, detections, meshData, timeline, toggleModule, activeModules }`
 
 **Acceptance criteria:**
-- `npx compact compile zkguard.compact` exits 0 with no errors.
-- `ts-node contracts/deploy.ts` prints a contract address and writes `VITE_CONTRACT_ADDRESS` to `.env`.
-- Smoke test (`ts-node contracts/smoke-test.ts`) passes end-to-end: tx confirmed, `isVerified` returns `true`.
-- GraphQL Indexer reflects the `VerificationRecord` within 5 seconds of tx confirmation.
+- All 7 modules render with animated visuals and toggle ON/OFF independently
+- Dashboard updates in real-time (<200ms latency)
+- Behavioral Mesh minimap renders all players with animated visibility cones and anomaly edges
+- Player score cards animate smoothly on score changes
+- Professional, technically impressive appearance — not a toy
+- Works in Chrome, no console errors
 
-**Dependencies:** §1 (Proof Server + Node must be running).
-
-**Technical notes + risks:**
-- 🚩 **Critical risk:** Compact syntax evolves rapidly on devnet builds. If the circuit API for `Proof<T>` or `verify()` differs from docs, Dev A must debug this before Sat noon or the entire proof pipeline is blocked. Have the Midnight Discord open.
-- The private witness (`isHuman`) appears only in the local circuit execution inside the Proof Server. It is **not** serialized into the transaction body — verify this by inspecting the tx hex after the smoke test.
-- The circuit is intentionally minimal (single boolean assert). Confidence scores and Behavioral Mesh results are displayed in the UI but do not enter the ZK proof. This is by design: the privacy claim ("we prove a clean session without revealing how") is equally valid.
-- 🚩 **Session ID collision:** two users with the same `sessionId` would overwrite each other's record. For the hackathon, generate session IDs as `keccak256(walletAddress + timestamp)` in the client. Document this as a known limitation.
+**Dependencies:** §2 (can begin with mock data).
 
 ---
 
-# PHASE 3 — DEEP AI ANTICHEAT + GNN-POWERED BEHAVIORAL MESH
+# PHASE 4 — MIDNIGHT ZK INTEGRATION
 
-## 3A. Transformer Behavioral Sequence Model (Input Analysis) 🧠
+## §4. On-Chain Verification
 
-**Goal:** Build a **Transformer-based sequence model** — architecturally analogous to a language model (LLM), but trained on behavioral input streams instead of text — that analyzes mouse, keyboard, and controller input as temporal token sequences and detects cheating through next-event probability analysis. This is the same class of architecture that powers GPT, but applied to the "language" of human motor behavior. The model runs **100% locally in the browser** via ONNX Runtime Web.
+**Goal:** Detection verdict fed as private witness into Midnight's Proof Server. Compact contract verifies ZK proof on-chain, issues session badge. Game dev queries badge — gets verified boolean, sees zero telemetry.
 
-**Why a Transformer Beats an Autoencoder:**
-- **Temporal reasoning:** Autoencoders see fixed windows. Transformers with causal attention understand *sequences* — they learn that a 250ms average reaction time that suddenly drops to 50ms mid-game is suspicious, even if each individual frame looks plausible.
-- **Next-event prediction:** Like a language model predicting the next word, our model predicts the probability distribution of the next input event. Cheaters produce low-probability events *consistently*. A humanized aimbot might fool a frame-by-frame detector, but it produces improbable *sequences* that a Transformer catches.
-- **Scalability:** Transformers scale with data and compute. Train longer = better model. An autoencoder plateaus quickly.
+### Step 4.1 — Compact Smart Contract
 
-**Technical Specifications:**
+`contracts/zkguard.compact`:
+```compact
+ledger {
+  verifiedSessions: Map<Bytes32, VerificationRecord>;
+}
 
-1. **Data Ingestion & Tokenization:**
-   - **Input Stream:** Capture DOM mouse/keyboard events at native browser event rate (~60–120Hz). Each event produces a feature vector: `[delta_time_ms, dx, dy, velocity, acceleration, angular_velocity, jitter, mouse_btn_state, keys_bitmask, path_curvature]` (10 features).
-   - **Temporal Tokenization:** Each input event is projected through a learned `Dense(10→64)` embedding layer, producing a 64-dimensional token. A 2-second window at 60Hz = 120 tokens = one input sequence.
-   - **Positional Encoding:** Sinusoidal positional encoding (standard Transformer PE) applied to the token sequence to preserve temporal ordering.
-   - **Feature Engineering (supplementary):** Per-window statistical features are also computed as auxiliary inputs: path straightness ratio, jitter variance, velocity kurtosis, reaction time distribution, click-to-kill timing. These feed into a secondary classification head.
+struct VerificationRecord {
+  isVerified: Boolean;
+  timestamp:  Uint64;
+  sessionId:  Bytes32;
+}
 
-2. **Model A Architecture — Behavioral Transformer (~5–10M parameters):**
-   - **Configuration:**
-     - `d_model = 64`, `n_heads = 4`, `n_layers = 6`, `d_ff = 256`, `max_seq_len = 128`
-     - Causal attention mask (decoder-only, like GPT)
-     - Total parameters: ~5–8M depending on final layer sizes
-   - **Dual Output Heads:**
-     - **Head 1 — Next-Event Prediction (Pre-training task):** Predict the probability distribution of the next input vector given the preceding sequence. Trained with MSE loss on continuous features. At inference, compute the *surprise score*: how far the actual next event deviates from the model's prediction. Consistent high surprise = non-human behavior.
-     - **Head 2 — Anomaly Classification (Fine-tuning task):** Binary classifier head on the `[CLS]` token equivalent (final hidden state). Fine-tuned with cross-entropy loss on labeled clean/cheat sequences. Outputs `P(cheat)` directly.
-   - **Final Score:** Weighted ensemble of surprise score (Head 1) and cheat probability (Head 2): `anomalyScore = 0.4 * surprise + 0.6 * P(cheat)`.
+circuit verifyHumanity(
+  private isHuman:   Boolean,
+  public  sessionId: Bytes32
+): Boolean {
+  assert(isHuman == true);
+  return true;
+}
 
-3. **Training Strategy (Overnight Saturday — GPU Required):**
+export transaction mintBadge(
+  proof:     Proof<verifyHumanity>,
+  sessionId: Bytes32
+): Void {
+  verify(verifyHumanity, proof, sessionId);
+  verifiedSessions.set(sessionId, VerificationRecord {
+    isVerified: true,
+    timestamp:  ledger.blockTime,
+    sessionId:  sessionId,
+  });
+}
 
-   **Phase 1: Data Collection (Saturday morning, ~2 hours)**
-   - **Human data (real):** Each team member records 30 minutes of mouse/keyboard interaction in the GameplayTestPanel → ~108,000 events per person × 3 people = **~324,000 human events**.
-   - **Human data (open-source):** Download and preprocess the Balabit Mouse Dynamics Dataset (~3.6M mouse events from 10 users), DFL Keystroke Dataset, and any available FPS replay datasets (CS:GO demo parser → input stream converter).
-   - **Combined human dataset target: 2–5 million input events.**
-   - **Cheat data (synthetic, large-scale):** `scripts/generateCheatData.py` generates 500,000+ cheat events across multiple profiles:
-     - `aimbot_perfect` — zero-jitter linear snap to target
-     - `aimbot_humanized` — adds Gaussian noise to trajectories but maintains inhuman reaction times and path straightness
-     - `triggerbot` — human-like aim with < 30ms reaction clicks when crosshair passes target
-     - `spinbot` — constant angular velocity, sometimes with random speed variation
-     - `recoil_script` — perfectly compensated recoil patterns (frame-perfect downward pull)
-     - `macro_bot` — periodic input patterns with < 1ms jitter variance
-     - `wallhack_aim` — aim direction correlated with invisible player positions (uses mesh simulation)
-   - **Combined cheat dataset target: 500K–1M synthetic cheat events.**
+export query isVerified(sessionId: Bytes32): Boolean {
+  return verifiedSessions.lookup(sessionId)?.isVerified ?? false;
+}
+```
 
-   **Phase 2: Pre-training (Saturday night, ~4–6 hours on GPU)**
-   - Pre-train the Transformer on the full human dataset using next-event prediction (self-supervised). This teaches the model the statistical structure of human motor behavior.
-   - Training infrastructure: PyTorch + HuggingFace Trainer, 1x NVIDIA GPU (RTX 3080+ or cloud GPU via Lambda/RunPod).
-   - Hyperparameters: `lr=3e-4`, `batch_size=64`, `epochs=50`, `warmup_steps=1000`, cosine LR schedule.
-   - Checkpoint saved every 10 epochs. Best model selected by validation loss on held-out human data.
+### Step 4.2 — Deploy & Test
 
-   **Phase 3: Fine-tuning (Sunday morning, ~1–2 hours)**
-   - Fine-tune the classification head (Head 2) using contrastive learning on labeled clean/cheat pairs.
-   - Loss function: Binary Cross-Entropy + Triplet Margin Loss (anchor=human, positive=human, negative=cheat).
-   - Freeze the Transformer backbone for first 5 epochs, then unfreeze last 2 layers for final 10 epochs.
+- `contracts/deploy.ts` — deploy to local devnet, write address to `.env`
+- `contracts/smoke-test.ts` — submit synthetic proof, verify `isVerified` returns `true`
 
-   **Phase 4: Export**
-   - Export to ONNX via `torch.onnx.export()`.
-   - Apply mixed Int8/Float16 quantization via ONNX Runtime quantization tools.
-   - Target model size: **20–50MB** (small enough for browser, large enough to impress judges).
-   - Validate ONNX inference output matches PyTorch output within tolerance < 0.01.
+### Step 4.3 — Service Integration
 
-4. **Inference Pipeline (Browser):**
-   - Load ONNX model via `onnxruntime-web` with WebGL execution provider (primary) and WASM fallback.
-   - Streaming model load during wallet connection phase to hide latency.
-   - Inference latency target: **< 100ms per 2-second window** on a modern laptop with WebGL.
-   - Continuous scoring via `setInterval` every 2 seconds. Maintains a rolling anomaly score over the last 10 windows.
-
-## 3B. GNN-Powered Behavioral Mesh Analysis (Cross-Player Detection) ⭐ UNIQUE DIFFERENTIATOR
-
-**Goal:** This is what makes ZK-Guard fundamentally different from Vanguard, EAC, BattlEye, and every other anticheat in existence. Traditional anticheats analyze one player at a time. ZK-Guard's Behavioral Mesh uses a **trained Graph Attention Network (GAT)** that takes the entire player session as a graph and *learns* to detect when a player's behavior reveals impossible spatial knowledge — the defining signature of wallhacks, ESP, and information-sharing cheats.
-
-**Why a GNN Beats a Heuristic Correlation:**
-- A heuristic "dot-product correlation between aim direction and hidden player position" is easily defeated by adding random look-around noise.
-- A trained GAT *learns* the complex, non-linear relationship between spatial awareness and aim behavior across *thousands* of simulated sessions. It catches subtle patterns that no hand-crafted rule can express.
-- The GAT can also detect *collaborative cheating* — two players whose behaviors are suspiciously coordinated despite no apparent communication channel.
-
-**Technical Specifications:**
-
-1. **Graph Structure:**
-   - **Nodes:** Each player in the session. Node features: `[x, y, z, pitch, yaw, velocity_x, velocity_y, velocity_z, aim_delta_x, aim_delta_y, health, is_visible_to_i]` (12 features per node, per frame).
-   - **Edges:** Fully connected graph (every player pair). Edge features: `[distance, angle_from_aim, is_line_of_sight, time_since_last_visible]` (4 features per edge).
-   - **Temporal stacking:** 30 frames (~0.5s) of graph snapshots stacked as a temporal sequence, giving the GAT both spatial AND temporal context.
-
-2. **Model B Architecture — Temporal Graph Attention Network (~2–5M parameters):**
-   - **Per-Frame GAT Block:** 2-layer GAT with 4 attention heads each. Node features → attention-weighted aggregation → updated node representations.
-   - **Temporal Aggregation:** The sequence of 30 per-frame GAT outputs is fed through a small 2-layer Transformer (same architecture as Model A but with `d_model=32, n_layers=2`) to capture temporal evolution of the spatial relationships.
-   - **Output Head:** Per-node classification: `knowledgeScore: number (0–1)`. High score = this player's behavior reveals impossible spatial knowledge.
-   - **Session-Level Output:** Max-pool across all player knowledge scores → `sessionAnomalyScore`.
-
-3. **Training Strategy:**
-   - **Synthetic session generation:** `scripts/generateMeshData.py` creates thousands of simulated 4–10 player sessions:
-     - **Clean sessions:** Players navigate a simple 2D map with obstacles. Aim direction correlated ONLY with visible targets. Movement follows pathfinding between objectives.
-     - **Wallhack sessions:** One player's aim direction is correlated with ALL player positions, including those behind walls. Subtle versions add noise and delayed reactions to mimic realistic wallhack usage.
-     - **ESP sessions:** Player movement patterns pre-react to enemy positions before line-of-sight is established.
-     - **Collaborative cheat sessions:** Two players exhibit coordinated flanking behavior that's statistically improbable without shared information.
-   - **Dataset size: 10,000+ simulated sessions** (each 30–120 seconds, sampled at 60Hz).
-   - **Training:** PyTorch Geometric (PyG), `GATConv` layers, same GPU as Model A. Trains in ~2–3 hours.
-   - **Export:** ONNX via `torch.onnx.export()` with dynamic axes for variable player counts. Int8 quantization. Target size: **10–20MB**.
-
-4. **Why This Is Better Than Vanguard:**
-
-   | Capability | Vanguard / EAC / BattlEye | ZK-Guard |
-   |---|---|---|
-   | **Kernel access** | ✅ Ring-0 driver, reads all memory | ❌ No kernel access. Browser-only. |
-   | **Data sent to server** | ✅ Telemetry beamed to Riot/EA | ❌ Nothing leaves the device. ZK proof only. |
-   | **Individual input analysis** | ✅ Server-side ML on input streams | ✅ Transformer sequence model (local) |
-   | **Cross-player analysis** | ❌ Players analyzed independently | ✅ **GNN Behavioral Mesh** — session-level graph analysis |
-   | **Collaborative cheat detection** | ❌ Not addressed | ✅ GAT detects coordinated behavior anomalies |
-   | **Privacy** | ❌ Total surveillance | ✅ Zero-knowledge proof. Game dev sees boolean only. |
-
-**Deliverables (Combined §3A + §3B):**
-- `src/ai/modelLoader.ts` — wraps `onnxruntime-web` to load both `behavioral-transformer.onnx` (~20–50MB) and `mesh-gat.onnx` (~10–20MB) asynchronously with progress callbacks.
-- `src/ai/tokenizer.ts` — converts raw DOM mouse/keyboard events into Transformer-compatible token sequences: `[batch, seq_len, d_model]` tensors.
-- `src/ai/featureExtractor.ts` — computes supplementary statistical features per-window (path straightness, jitter variance, reaction time distribution, velocity kurtosis).
-- `src/ai/behaviorAnalyzer.ts`:
-  - `BehaviorResult` type: `{ isHuman: boolean; confidence: number; anomalyScore: number; surpriseScore: number; knowledgeScore: number; sessionId: string; }`.
-  - `BehaviorAnalyzer` class:
-    - Maintains a sliding window buffer of the last N input events.
-    - `analyze()` — runs the Transformer forward pass (next-event prediction + classification heads), queries the Behavioral Mesh GAT for knowledge anomaly, ensembles all signals, returns `BehaviorResult`.
-- `src/ai/meshAnalyzer.ts` — Behavioral Mesh powered by the trained GAT:
-  - `BehavioralMesh` class maintains a graph of `PlayerNode` objects with full spatial state.
-  - `updatePlayerState(playerId, x, y, z, pitch, yaw)` — updates graph nodes.
-  - `computeVisibilityEdges()` — recalculates line-of-sight between all player pairs.
-  - `analyzeGraph()` — serializes the graph to a tensor, runs GAT inference via ONNX, returns per-player `knowledgeScore`.
-- `src/ai/meshVisualizer.ts` — Canvas-based 2D top-down minimap renderer:
-  - Player positions as colored dots with directional aim indicators
-  - Visibility cones as translucent arcs
-  - **Knowledge anomaly edges** as animated red lines (pulse when score is high)
-  - Per-player knowledge score as floating labels
-  - This visualization is the **demo's visual proof** that the AI is doing something no other anticheat does
-- `src/ai/cheatSimulator.ts` — programmatic cheat trajectory generators:
-  - `simulateAimbot(targetX, targetY, humanization?)` → linear snap trajectory, optionally with noise
-  - `simulateWallhack(hiddenPlayerPositions, reactionDelay?)` → aim tracking through walls
-  - `simulateSpinbot()` → constant-velocity rotation
-  - `simulateHumanizedAimbot()` → realistic aim with inhuman reaction time distribution
-  - `simulateCollabCheat(partnerPositions)` → coordinated movement patterns
-  - `simulateHuman()` → replay captured human data with augmentation noise
-- `scripts/generateCheatData.py` — large-scale synthetic cheat data generator (500K+ events).
-- `scripts/generateMeshData.py` — synthetic session generator for GNN training (10K+ sessions).
-- `scripts/trainTransformer.py` — PyTorch training script for Model A (Behavioral Transformer). Pre-train + fine-tune pipeline.
-- `scripts/trainGAT.py` — PyTorch Geometric training script for Model B (Mesh GAT).
-- `scripts/exportONNX.py` — export both models to ONNX with quantization and validation.
-- `src/ai/behaviorAnalyzer.test.ts` — unit tests:
-  - Human input → `isHuman: true`, low anomaly + surprise scores.
-  - Perfect aimbot → `isHuman: false`, high anomaly score.
-  - Humanized aimbot (with noise) → `isHuman: false` — **this is the key test that proves the Transformer catches what an autoencoder misses**.
-  - Wallhack simulation → `isHuman: false`, high knowledge score from GAT.
-  - Collaborative cheat → both players flagged by mesh analysis.
-  - Clean local input, clean spatial state → all scores green.
+- `dashboard/src/services/midnightService.ts` — wallet connection, proof submission, badge query
+- `dashboard/src/services/midnightService.mock.ts` — mock mode (`VITE_USE_MOCK_SDK=true`)
+- Docker Compose: Midnight Node + GraphQL Indexer + Proof Server
 
 **Acceptance criteria:**
-- Combined model size is **< 70MB** and loads via `onnxruntime-web` in under 5 seconds (streamed during wallet connection).
-- Transformer inference for a single 2-second window takes **< 100ms** in Chrome with WebGL.
-- GAT inference for a 4-player graph takes **< 50ms**.
-- **Perfect aimbot detected with > 99% accuracy** on synthetic test set.
-- **Humanized aimbot detected with > 85% accuracy** — this proves the Transformer's temporal reasoning.
-- **Wallhack detected with > 90% accuracy** via GNN mesh analysis.
-- Clean human input passes with `isHuman: true` and confidence > 80.
-- Behavioral Mesh visualizer renders in real-time without frame drops.
-- **Cheat simulation toggle in the demo UI works smoothly** (key demo moment).
-- Zero reliance on external backend server API calls for inference.
+- Circuit compiles. Badge mints. `isVerified` returns `true`.
+- Mock mode allows full dashboard demo without Docker.
 
-**Dependencies:** GPU access for overnight training (RTX 3080+ or cloud GPU). Can build inference pipeline in parallel with §2. Training data collected Saturday morning. Models trained Saturday night → Sunday morning.
-
-**Technical notes + risks:**
-- **Risk:** Transformer pre-training takes longer than expected. **Mitigation:** Start training Saturday 6pm and let it run overnight. If the model hasn't converged by Sunday 8am, use the best checkpoint available — even a partially trained Transformer outperforms an autoencoder on temporal patterns. The classification head fine-tuning only takes 1–2 hours.
-- **Risk:** ONNX Runtime Web WebGL can be slow on older hardware. **Mitigation:** Test on the actual demo machine Saturday night. If WebGL inference is too slow, fall back to WASM (slower but more compatible). Reduce `max_seq_len` to 64 if needed.
-- **Risk:** GNN training on synthetic mesh data may not transfer perfectly. **Mitigation:** The synthetic session generator is configurable. If the GAT underperforms, increase the diversity of cheat profiles in the training data. The heuristic correlation score remains as a lightweight fallback — but the trained GAT should massively outperform it.
-- **Risk:** Combined model size (60–70MB) is large for browser load. **Mitigation:** Stream both models during wallet connection using `fetch` with `ReadableStream`. Show a progress bar. Most users on modern connections can download 70MB in < 10 seconds. Aggressive Int8 quantization can reduce this to ~30MB with minimal accuracy loss.
-- **Risk:** PyTorch Geometric (PyG) dependency for GNN training. **Mitigation:** Install PyG in a conda environment Saturday morning. If PyG installation fails on the training machine, implement the GAT manually using base PyTorch `nn.Module` — it's only 2 attention layers.
-- **Fallback plan:** If both deep learning models fail to train or export, a statistical feature classifier (path straightness, jitter, reaction time thresholds) combined with the heuristic mesh correlation can still detect blatant cheats. This is the absolute floor — it ships but won't win the AI track.
+**Dependencies:** §1 Docker stack running.
 
 ---
 
-# PHASE 4 — SDK INTEGRATION LAYER
+# PHASE 5 — MATCH SIMULATOR
 
-## 4. Midnight.js Service
+## §5. Demo Match Simulation with Cheat Injection
 
-**Goal:** Write a typed service module that sequences wallet connection, proof input construction, proof generation + tx submission, and badge status query. This is the bridge between Phase 3's AI output and Phase 2's on-chain contract.
+**Goal:** Simulate a realistic 5v5 FPS match with configurable cheat profiles. Judges can **toggle cheats ON/OFF per player** from the dashboard and watch visual detection modules respond in real-time.
 
-**Deliverables:**
-- `src/services/midnightService.ts` implementing four exported async functions:
+### Step 5.1 — Match Simulator Engine
 
-  ```typescript
-  // 1. Connect Lace wallet via dapp-connector-api
-  connectLaceWallet(): Promise<MidnightWallet>
+`server/simulation/matchSimulator.py`:
+- 5v5 match on a 2D map with obstacles (walls, corridors)
+- 10 AI-controlled players with human-like movement and aim
+- Outputs telemetry in standard `TickData` schema at 64 ticks/sec
+- Feeds directly into the telemetry ingestion pipeline (§1)
 
-  // 2. Run behavioral analysis + generate proof + submit mintBadge tx
-  submitVerification(
-    wallet: MidnightWallet,
-    result: BehaviorResult
-  ): Promise<{ txHash: string; sessionId: string }>
+### Step 5.2 — Injectable Cheat Profiles
 
-  // 3. Poll the GraphQL Indexer for badge status
-  queryBadgeStatus(sessionId: string): Promise<boolean>
+| Profile | Behavior | Visual Detection Response |
+|---|---|---|
+| 🟢 `clean` | Baseline human behavior | All gauges green, no anomalies |
+| 🎯 `aimbot` | Snap-to-target aim | Aim trajectory straightens, angular velocity spikes red |
+| 👁 `wallhack` | Aim tracks invisible players | Mesh minimap lights up with red pulsing edges |
+| ⚡ `speedhack` | Velocity exceeds limits | Velocity chart breaks above red physics-limit line |
+| 🤖 `macro` | Periodic recoil comp | FFT spectrum shows periodic peaks glowing |
+| 🤝 `collab` | Coordinated info sharing | Coordination heatmap intensifies between player pair |
 
-  // 4. Utility: disconnect and clear local state
-  disconnect(wallet: MidnightWallet): Promise<void>
-  ```
+### Step 5.3 — Simulation Control API
 
-- `src/services/midnightService.ts` internals:
-  - `connectLaceWallet` — calls `DAppConnectorAPI.connect({ dAppName: 'ZK-Guard', networkId: 'Undeployed' })`, returns wallet handle.
-  - `submitVerification` — constructs `privateWitness: { isHuman }` and `publicInputs: { sessionId }`, instantiates `CompactRuntime` pointing at `PROOF_SERVER_URL`, calls `runtime.mintBadge(...)`, awaits tx receipt. Note: `confidence`, `anomalyScore`, and `knowledgeScore` from the `BehaviorResult` are displayed in the UI but NOT included in the ZK proof — only the boolean enters the circuit.
-  - `queryBadgeStatus` — `fetch` POST to `INDEXER_URL` with `{ query: 'query { isVerified(sessionId: "...") }' }`, returns `data.isVerified`.
-- `src/services/midnightService.mock.ts` — drop-in mock that skips the real Proof Server: `submitVerification` resolves in 2 seconds with a fake `txHash`, `queryBadgeStatus` always returns `true`. Controlled by `VITE_USE_MOCK_SDK=true`. Use this to unblock frontend development in §5 while §2 is still in progress.
+`server/api/simulation_control.py`:
+- `POST /sim/start` — start match
+- `POST /sim/player/{id}/cheat/{type}` — toggle cheat profile
+- `POST /sim/stop` — end match
+- `GET /sim/status` — current match state
 
-**Acceptance criteria:**
-- `connectLaceWallet()` opens the Lace Wallet prompt in a Midnight-enabled browser.
-- `submitVerification()` with a valid `BehaviorResult` returns a non-empty `txHash`.
-- `queryBadgeStatus()` with that session ID returns `true` within 10 seconds of tx confirmation.
-- Mock mode (`VITE_USE_MOCK_SDK=true`) makes the frontend fully usable without a running Docker stack.
-
-**Dependencies:** §2 (contract address must be in `.env`), §3 (`BehaviorResult` type).
-
-**Technical notes + risks:**
-- 🚩 **Highest-risk integration point.** `CompactRuntime` proof generation can take 5–60 seconds depending on circuit complexity and Proof Server load. Set a 90-second timeout in the `fetch` call wrapping the Proof Server. Surface progress state to the UI (see §5).
-- The `DAppConnectorAPI` requires the Lace extension to be installed in the same browser. Test on Chrome. Brave may block the extension communication — verify on Friday night.
-- Private witness serialization: `isHuman` must be serialized as a Compact `Boolean` (likely `0x00` / `0x01` byte), not a JS boolean. Inspect the `compact-js` types carefully — type mismatch here is a silent failure that produces an invalid proof.
-- Fallback plan: if proof generation fails consistently, mock the `CompactRuntime.mintBadge` call to return a hardcoded proof bytes value and submit a pre-built tx. This lets the demo show wallet signing and badge query even if the Proof Server is misbehaving. Document the workaround explicitly in the pitch as "circuit execution validated separately."
-
----
-
-# PHASE 5 — REACT FRONTEND
-
-## 5. Demo UI
-
-**Goal:** Build a demo UI that tells a **story**, not just shows a flow. The key demo moment: the judge watches the user toggle between Human/Aimbot/Wallhack modes and sees the AI catch the cheat in real-time, then watches the ZK proof + badge mint happen with zero data exposure. The UI must make the Behavioral Mesh visualization impossible to ignore.
-
-**Deliverables:**
-- `src/components/GameplayTestPanel.tsx`:
-  - Renders a **game-like canvas** capture zone where the user moves the mouse (dark background, subtle grid, target markers).
-  - **🎯 Cheat Simulation Toggle** (THIS IS THE DEMO WOW MOMENT):
-    - Three-button toggle bar at the top of the panel:
-      - 🟢 **Human Mode** — user moves mouse naturally. AI scores it as clean.
-      - 🔴 **Aimbot Mode** — mouse snaps in perfect straight lines to random target markers. AI catches the zero-jitter linear trajectory.
-      - 🟡 **Wallhack Mode** — cursor tracks a "hidden" player marker (shown as translucent/behind-wall indicator). The Behavioral Mesh lights up with red anomaly edges.
-    - In cheat modes, the `cheatSimulator.ts` module generates synthetic input events injected into the analysis pipeline.
-  - **Cursor Trajectory Heatmap**: Canvas overlay rendering the last 3 seconds of mouse path.
-    - Human input: organic, noisy, curved paths with color gradient (cool→warm).
-    - Bot input: ruler-straight lines, sharp angles, uniform color. Judges can *see* the difference before the AI even scores it.
-  - **Live Score Dashboard**: Real-time display of:
-    - `anomalyScore` (0–1) — color-coded gauge (green→yellow→red)
-    - `knowledgeScore` (0–1) — from Behavioral Mesh
-    - `confidence` (%) — overall assessment
-    - Event counter showing total events captured
-  - "Verify & Mint Badge" button triggers the full verification flow (§4).
-
-- `src/components/BehavioralMeshPanel.tsx`:
-  - Embeds the `meshVisualizer.ts` canvas — 2D top-down minimap of the simulated 4-player session.
-  - Shows player positions, visibility cones, and **red knowledge anomaly edges** when wallhack mode is active.
-  - This panel sits alongside the GameplayTestPanel so the judge sees both simultaneously.
-
-- `src/components/VerificationStatus.tsx`:
-  - Renders 5 states driven by a `VerificationState` enum: `idle | capturing | analyzing | proving | verified | flagged`.
-  - `idle`: prompt to move mouse in the capture zone.
-  - `capturing`: live — "Capturing input trajectory… move your mouse naturally."
-  - `analyzing`: spinner + "Behavioral AI analyzing input patterns and spatial mesh…"
-  - `proving`: spinner + "Generating ZK proof locally — your raw data stays on your device." (5–30s; copy manages expectation.)
-  - `verified`: green badge animation, tx hash (truncated, linked to explorer), session ID.
-  - `flagged`: red alert — "⚠ Anomalous behavior detected. Verification denied." (shown when cheat mode is active)
-
-- `src/components/GameDevView.tsx`:
-  - Simulates the game developer's server-side check.
-  - Shows a "Check Badge" button that calls `queryBadgeStatus(sessionId)`.
-  - Renders `✅ Verified Clean Player — session admitted` or `❌ Unverified — session rejected`.
-  - **Key visual**: a "What the game dev sees" vs. "What's on your device" comparison. The game dev side shows ONLY the boolean. Your device side shows the full heatmap, scores, and mesh — proving the privacy guarantee visually.
-
-- `src/components/WalletConnect.tsx`:
-  - "Connect Lace Wallet" button.
-  - Shows wallet address (truncated) when connected.
-  - Disables `GameplayTestPanel` until connected.
-  - **Pre-warms ONNX model** during wallet connection (load model while user is clicking through the Lace popup).
-
-- `src/App.tsx`:
-  - Layout: `WalletConnect` header → two-row body:
-    - **Top row:** `GameplayTestPanel` (left, ~60% width) + `BehavioralMeshPanel` (right, ~40% width).
-    - **Bottom row:** `VerificationStatus` (left) + `GameDevView` (right).
-  - `useVerification()` hook manages shared state across all panels.
-
-- `src/hooks/useVerification.ts`:
-  - Encapsulates the full state machine: wallet → capture → analyze → prove → badge.
-  - Exports: `{ state, walletAddress, sessionId, txHash, behaviorResult, cheatMode, setCheatMode, connect, analyze, queryBadge }`.
+Dashboard integrates toggle buttons per player so judges can inject cheats live.
 
 **Acceptance criteria:**
-- Full happy path (Human Mode) completable in one browser tab without touching the terminal.
-- **Cheat simulation toggle visibly changes the AI scores in real-time** — this must work flawlessly for the demo.
-- Cursor heatmap clearly distinguishes human vs. bot trajectories visually.
-- Behavioral Mesh minimap shows red anomaly edges in Wallhack Mode.
-- `proving` spinner appears for ≥ 2 seconds (even in mock mode) to demonstrate the ZK step.
-- `flagged` state appears when running verification in cheat mode.
-- `GameDevView` correctly shows the badge status without showing any of the raw behavioral data.
-- UI renders without error in Chrome with Lace extension installed.
-- `VITE_USE_MOCK_SDK=true` allows a full demo run without Docker.
+- Match runs at 64 ticks/sec without frame drops
+- Toggling cheat → corresponding visual module flags player within 3 seconds
+- Toggling back to clean → scores normalize within 5 seconds
+- Clean players stay green throughout
 
-**Dependencies:** §3 (analyzer + mesh + cheat simulator), §4 (service + mock service). Can begin with mock from Saturday morning.
-
-**Technical notes + risks:**
-- Do not use `<form>` tags — use `onClick` handlers on `<button>` elements.
-- State machine tip: use a `useReducer` in `useVerification.ts` with explicit `VerificationState` enum transitions. Avoid a sprawl of `useState` calls that can get out of sync during the async proof step.
-- Risk: Lace Wallet popup is blocked by some browsers on non-user-gesture events. The `connectLaceWallet()` call must be triggered directly from a button `onClick` — not from a `useEffect`.
-- 🚩 **Demo polish risk:** the `proving` state takes real time. Test the full flow on the demo machine (not just localhost) before Sunday. Latency to the local Proof Server varies by machine.
-- **Heatmap performance:** Use a separate offscreen canvas for the trajectory trail to avoid repainting the entire heatmap every frame. Clear with alpha fade (`globalAlpha = 0.05`) for a smooth trail effect.
+**Dependencies:** §1, §2.
 
 ---
 
 # PHASE 6 — INTEGRATION, DEMO + PITCH
 
-## 6. End-to-End Integration, Demo Video, and Pitch Assets
+## §6. End-to-End Demo
 
-**Goal:** Run the full happy path on the actual demo machine, record a 2-minute demo video, and finalize the three pitch deck bullets.
+**Goal:** Run the full pipeline, record a 90-second demo video, finalize pitch.
 
-**Deliverables:**
-- End-to-end integration test checklist:
-  - [ ] `docker compose up` — all 3 services healthy
-  - [ ] Contract deployed, address in `.env`
-  - [ ] Lace Wallet connected in Chrome with devnet MIDNIGHT loaded
-  - [ ] **Human Mode:** natural input captured → `isHuman: true`, low anomaly score
-  - [ ] **Aimbot Mode:** toggle → AI flags anomaly, scores spike, heatmap shows straight lines
-  - [ ] **Wallhack Mode:** toggle → Behavioral Mesh shows red anomaly edges, knowledge score spikes
-  - [ ] **Back to Human Mode:** run full verification → proof generated by local Proof Server (not mocked) → tx submitted
-  - [ ] `isVerified(sessionId)` via GraphQL Indexer returns `true`
-  - [ ] GameDevView shows ✅ badge with zero raw data visible on the game dev side
-- Demo video (90 seconds max) — **STORY-DRIVEN, NOT FLOW-DRIVEN:**
-  ```
-  0–10s: THE HOOK
-    "Every competitive game uses kernel-level anticheats that spy on
-    your entire computer. What if the anticheat ran locally, used AI
-    to detect cheats, and proved it with zero-knowledge — without
-    ever seeing your data?"
+### Step 6.1 — Integration Checklist
 
-  10–30s: THE PLAYER EXPERIENCE (HAPPY PATH)
-    - Show natural mouse input → cursor heatmap shows organic paths
-    - AI scores: green, clean, confidence high
-    - ZK proof generated → badge minted on Midnight
-    - Quick: show the tx on-chain, show absence of raw data
+- [ ] Server starts: FastAPI + AI models loaded
+- [ ] Docker Compose: Midnight Node + Indexer + Proof Server
+- [ ] Dashboard connects via WebSocket
+- [ ] Match simulator starts 5v5 match
+- [ ] All 7 visual detection modules render with live animated data
+- [ ] Toggle aimbot ON → Aim Analysis visuals spike red ✅
+- [ ] Toggle wallhack ON → Mesh minimap shows red pulsing edges ✅
+- [ ] Toggle back to clean → visuals normalize ✅
+- [ ] ZK verification → badge minted on Midnight ✅
+- [ ] `isVerified(sessionId)` returns `true` ✅
 
-  30–55s: THE "HOLY SHIT" MOMENT ← THIS IS WHAT WINS
-    - Toggle "Aimbot Mode" → heatmap shows straight lines
-      → AI catches it instantly, anomaly score spikes red
-    - Toggle "Wallhack Mode" → Behavioral Mesh minimap lights up
-      → red edges show player tracking targets through walls
-      → "The AI doesn't just watch you — it builds a behavioral
-        mesh across all players and catches impossible knowledge."
-    - Verification DENIED. Flagged state shown.
+### Step 6.2 — Demo Video (90 Seconds)
 
-  55–75s: THE PRIVACY GUARANTEE
-    - Show GameDevView: game dev gets ONLY "verified / not verified"
-    - Split screen: "What's on your device" (heatmap, scores, mesh)
-      vs. "What the game dev sees" (single boolean)
-    - "The game dev never sees your mouse movements, your screen,
-      your files — just a cryptographic proof."
+```
+0–10s: THE HOOK
+  "Vanguard reads your memory. EAC scans your files. BattlEye
+  fingerprints your hardware. What if an anticheat never touched
+  your machine — and was even more accurate?"
 
-  75–90s: PITCH CLOSE
-    - "ZK-Guard: Privacy-preserving anticheat powered by behavioral
-      AI, cross-player mesh analysis, and Midnight's zero-knowledge
-      proofs. Your gameplay data stays yours."
-  ```
-- `PITCH.md`: three technical moat bullets:
-  1. **Behavioral Mesh Analysis** — the only anticheat that reasons about cross-player knowledge graphs, not just individual input.
-  2. **Zero-Knowledge Proof of Humanity** — game developers get a verified boolean, never your raw data.
-  3. **100% Local AI** — no kernel access, no server uploads, no privacy invasion.
-- `README.md` updated with full local run instructions for judges.
+10–30s: THE DASHBOARD
+  - Show the detection dashboard monitoring a live 5v5 match
+  - All 10 players visible — animated score cards, mesh minimap, timeline
+  - Everything green — all players clean
 
-**Acceptance criteria:**
-- Happy path runs clean 3× in a row without error on the demo machine.
-- Demo video is ≤ 90 seconds with no visible error states.
-- Judges can run `docker compose up && pnpm dev` and reach a working frontend.
+30–55s: THE DETECTION (WOW MOMENT — VISUALS)
+  - Toggle "Aimbot" on Player 3 → Aim Analysis canvas shows straight-line
+    trajectory → angular velocity chart spikes red → snap markers pulse
+  - Toggle "Wallhack" on Player 7 → Mesh minimap lights up →
+    red pulsing edges show Player 7 tracking through walls
+  - Toggle "Macro" on Player 5 → FFT spectrum shows glowing periodic peaks
+  - Show player score cards animating from green → red in real-time
+  - "ZK-Guard caught 3 cheaters in 3 seconds. Without touching
+    a single player's machine."
 
-**Dependencies:** All previous sections.
+55–75s: THE PRIVACY PROOF
+  - Run ZK verification → badge minted on Midnight
+  - Show: "What the game dev sees" = single boolean ✅
+  - Show: "What was never shared" = all telemetry + detection data
+  - "Zero kernel access. Zero data exposure. Just math."
 
-**Technical notes + risks:**
-- Shoot the demo video with `VITE_USE_MOCK_SDK=false` (real proof) if the pipeline is stable. Fall back to mock mode only if the Proof Server is unstable on demo day — but disclose this in the video voiceover.
-- Risk: proof generation time varies by machine. If it takes > 45 seconds on the demo machine, the video pacing breaks. Pre-warm the Proof Server (`docker compose up` and run one proof) before recording.
-- Keep `contracts/smoke-test.ts` running in a terminal during the recording as a sanity check that the devnet is live.
+75–90s: THE INTEGRATION PITCH
+  - Show the 6-line integration code snippet
+  - "Any game. Any engine. 10 lines of code. No SDK license.
+    No paid tools. No client install. Just HTTP."
+  - "ZK-Guard: server-side AI anticheat with Behavioral Mesh,
+    zero invasion, and zero-knowledge privacy on Midnight."
+```
+
+### Step 6.3 — Pitch Bullets (PITCH.md)
+
+1. **Zero Local Footprint** — nothing on the player's machine. No kernel driver, no agent, no scanning.
+2. **10-Line Integration** — any multiplayer game integrates via REST or WebSocket. No SDK license, no paid tools.
+3. **Behavioral Mesh Analysis** — the only anticheat using a trained GNN to analyze cross-player spatial graphs, catching wallhacks and collaborative cheating that per-player analysis misses.
+4. **Visual Real-Time Detection** — 7 animated detection modules with live charts, graphs, and an interactive minimap.
+5. **ZK-Verified on Midnight** — on-chain proof of clean status. Game devs get a verified boolean, never raw data.
 
 ---
 
 # Cross-Cutting Concerns
 
-## Open Questions (Roll-Up)
+## Game Integration Examples (Multiple Engines)
+
+### Unity C# (6 lines)
+```csharp
+var ws = new ClientWebSocket();
+await ws.ConnectAsync(new Uri($"ws://zkguard:8000/telemetry/{matchId}"), ct);
+// Each tick:
+var tick = JsonConvert.SerializeObject(new { tick=t, timestamp_ms=ms,
+    match_id=matchId, players=playerStates, events=gameEvents });
+await ws.SendAsync(Encoding.UTF8.GetBytes(tick), WebSocketMessageType.Text, true, ct);
+```
+
+### Unreal C++ (REST)
+```cpp
+FHttpRequestRef Req = FHttpModule::Get().CreateRequest();
+Req->SetURL(TEXT("http://zkguard:8000/api/tick"));
+Req->SetVerb(TEXT("POST"));
+Req->SetContentAsString(TickDataJson);
+Req->ProcessRequest();
+```
+
+### Godot GDScript
+```gdscript
+var ws = WebSocketPeer.new()
+ws.connect_to_url("ws://zkguard:8000/telemetry/" + match_id)
+# Each tick:
+ws.send_text(JSON.stringify({"tick":t,"match_id":match_id,"players":states,"events":evts}))
+```
+
+### Node.js (custom server)
+```javascript
+const ws = new WebSocket(`ws://zkguard:8000/telemetry/${matchId}`);
+ws.send(JSON.stringify({ tick, timestamp_ms, match_id, players, events }));
+```
+
+## Open Questions
 
 | # | Question | Owner | Resolved by |
 |---|---|---|---|
-| 1 | ~~Single vs. two-input circuit~~ | Dev A | ✅ **RESOLVED — single boolean.** |
-| 2 | Session ID scheme: `crypto.randomUUID()` vs. `keccak256(wallet + timestamp)` | Dev A + Dev B | §2/§4 interface agreement, Friday night |
-| 3 | ~~AI model architecture~~ | Dev B | ✅ **RESOLVED — Dual deep learning pipeline.** Transformer sequence model (5–10M params) + Graph Attention Network for Behavioral Mesh (2–5M params). Trained overnight Saturday on GPU. |
-| 4 | ARM Mac compatibility for Midnight Docker images | Dev A | §1 Friday night — if blocked, assign Proof Server to Intel machine |
-| 5 | Lace Wallet compatibility on Brave vs. Chrome | Dev C | §1/§5 Friday night browser test |
-| 6 | Demo: real proof or mock mode for video recording | All | §6 Sunday morning based on pipeline stability |
+| 1 | Session ID scheme: UUID vs. keccak256(matchId + playerId) | Dev A + B | §4 interface agreement |
+| 2 | GPU for overnight training (local RTX vs. cloud free tier) | Dev B | Friday night |
+| 3 | Demo: real ZK proof or mock mode for video | All | Sunday morning based on stability |
 
-## Risks Roll-Up (Top 5)
+## Risks (Top 5)
 
-1. **Compact circuit compile failure or API mismatch** — Midnight devnet tooling is pre-production. If `compact compile` fails or the `Proof<T>` API doesn't match the docs, the entire proof pipeline is blocked. Mitigation: Dev A validates the simplified single-boolean circuit by end of Friday night. If blocked, mock the proof server call for the demo.
-2. **Transformer / GNN training fails or doesn't converge overnight** — deep learning models are sensitive to hyperparameters and data quality. Mitigation: (a) checkpoint every 10 epochs, use best checkpoint even if training is incomplete, (b) a partially-trained Transformer still outperforms an autoencoder on temporal patterns, (c) statistical feature classifier remains as an absolute-floor fallback. Start training by Saturday 6pm to maximize training time.
-3. **Lace Wallet devnet mode not functional** — Lace may require specific Midnight devnet configuration flags. Mitigation: test wallet connection before writing any contract code. If wallet connection fails, the signing step can be bypassed with a pre-signed tx for demo purposes.
-4. **Proof generation latency > 60 seconds** — makes the demo awkward and video pacing impossible. Mitigation: the circuit is now minimal (single boolean). Pre-warm the Proof Server before recording. Use mock mode for the video if latency is > 30s.
-5. **Cheat simulation toggle doesn't demo well** — if the AI scores don't visibly change when toggling modes, the demo loses its impact. Mitigation: test the toggle flow 10+ times before recording. Ensure the heatmap, scores, and mesh visualization update in real-time. This is the most important demo rehearsal item.
+1. **Compact circuit compile failure** — Midnight tooling is pre-production. Mitigation: validate trivial circuit Friday night. Mock if blocked.
+2. **Transformer / GNN training doesn't converge** — Mitigation: checkpoint every 10 epochs. Statistical classifier as fallback.
+3. **Match simulator behavior too simple** — Mitigation: detection module visual responses matter more than game realism for judges.
+4. **WebSocket performance at 64 tick/s** — Mitigation: batch ticks (send every 4 = 16 msg/sec).
+5. **Dashboard too complex to polish** — Mitigation: prioritize 3 core visual modules (Aim, Wallhack, Macro) first. 3 polished > 7 rough.
 
-## Definition of Done — Whole Product
+## Definition of Done
 
 The full ZK-Guard demo is done when:
-- A new user on Chrome with Lace Wallet installed can: connect wallet → move mouse naturally → see the AI score it as clean → toggle Aimbot/Wallhack mode → watch the AI catch it in real-time → toggle back to Human → run verification → watch proof generate locally → see the Verified Clean Player badge → see a simulated game developer query return `true` — **in under 90 seconds, with zero console errors, on the demo machine.**
-- The cheat simulation toggle produces **visibly different** AI scores (including Transformer surprise score and GNN knowledge score), heatmap patterns, and Behavioral Mesh states.
-- The on-chain `isVerified(sessionId)` query (against the real GraphQL Indexer, not a mock) returns `true`.
-- The raw input data, anomaly scores, and mesh graph are verifiably absent from the transaction body (show this in the demo — inspect the tx in the Midnight block explorer or via GraphQL).
-- The pitch video is recorded with the story-driven structure and the three technical moat bullets are locked.
+- The dashboard monitors a live simulated 5v5 match with all players visible and animated visualizations running
+- A judge can **toggle cheats ON/OFF per player** and watch visual detection modules respond in real-time — charts spike when cheat is ON, normalize when OFF
+- At least 3 detection modules (Aim Analysis, Wallhack/Mesh, Macro) show professional animated visualizations
+- All detection modules are independently toggleable ON/OFF
+- The ZK proof flow works: verdict → proof → on-chain badge → `isVerified` returns `true`
+- Raw telemetry is absent from the on-chain transaction
+- Any game can integrate via the 10-line REST/WebSocket API — no paid tools required
+- The demo video is recorded with the story-driven structure
+- **Nothing is installed on the player's machine. Zero local footprint. This is non-negotiable.**
