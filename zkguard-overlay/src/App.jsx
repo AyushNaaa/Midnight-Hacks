@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─────────────────────────────────────────────────────────────
 //  EDIT THIS BLOCK FOR EACH CLIP YOU RECORD
@@ -155,6 +155,37 @@ export default function App() {
   const [programStarted, setProgramStarted] = useState(false);
   const [isHacking, setIsHacking] = useState(false);
 
+  // Opacity tracking
+  const hoverTimerRef = useRef(null);
+
+  const setElectronOpacity = (val) => {
+    if (window.require) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        ipcRenderer.send('set-opacity', val);
+      } catch (e) {
+        // Ignore if not running in Electron
+      }
+    }
+  };
+
+  const handleMouseEnter = () => {
+    clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setElectronOpacity(1.0);
+    }, 2000);
+  };
+
+  const handleMouseLeave = () => {
+    clearTimeout(hoverTimerRef.current);
+    setElectronOpacity(0.75);
+  };
+
+  const handleClick = () => {
+    clearTimeout(hoverTimerRef.current);
+    setElectronOpacity(1.0);
+  };
+
   const { clipName, players, detections, knowledgeEdges } = CLIP_CONFIG;
   
   // Filter suspects based on if the hack toggle is ON
@@ -172,7 +203,12 @@ export default function App() {
 
   if (!programStarted) {
     return (
-      <div style={{
+      <div 
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+        style={{
+        WebkitAppRegion: "drag",
         width: 320, padding: 20, background: C.bg, border: `1px solid ${C.border}`,
         borderRadius: 8, fontFamily: mono, color: C.text, textAlign: 'center'
       }}>
@@ -180,7 +216,7 @@ export default function App() {
         <p style={{ fontSize: 11, marginBottom: 20, color: C.dim }}>Ready to analyze clip: {clipName}</p>
         <button 
           onClick={() => setProgramStarted(true)}
-          style={{ background: C.clean, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
+          style={{ WebkitAppRegion: "no-drag", background: C.clean, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
           START PROGRAM
         </button>
       </div>
@@ -189,7 +225,11 @@ export default function App() {
 
   if (mini) {
     return (
-      <div onClick={() => setMini(false)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 14px", background: C.bg, border: `1px solid ${suspects.length > 0 ? C.cheat : C.border}44`, borderRadius: 20, cursor: "pointer", fontFamily: mono, fontSize: 11, color: suspects.length > 0 ? C.cheat : C.text, userSelect: "none" }}>
+      <div 
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={(e) => { handleClick(); setMini(false); }} 
+        style={{ WebkitAppRegion: "drag", display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 14px", background: C.bg, border: `1px solid ${suspects.length > 0 ? C.cheat : C.border}44`, borderRadius: 20, cursor: "pointer", fontFamily: mono, fontSize: 11, color: suspects.length > 0 ? C.cheat : C.text, userSelect: "none" }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", display: "inline-block", background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.25, flexShrink: 0 }} />
         ZK-GUARD · {suspects.length} SUSPECT{suspects.length !== 1 ? "S" : ""}
         <span style={{ color: C.dim, fontSize: 10, marginLeft: 4 }}>▲ expand</span>
@@ -198,18 +238,22 @@ export default function App() {
   }
 
   return (
-    <div style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", fontFamily: mono, fontSize: 12, color: C.text }}>
+    <div 
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
+      style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", fontFamily: mono, fontSize: 12, color: C.text }}>
       
       {/* ── Demo Control Bar (Added for Demo) ── */}
-      <div style={{ display: 'flex', gap: 4, padding: 8, background: '#000', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ WebkitAppRegion: "drag", display: 'flex', gap: 4, padding: 8, background: '#000', borderBottom: `1px solid ${C.border}` }}>
         <button 
           onClick={() => setIsHacking(false)}
-          style={{ flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: !isHacking ? C.clean : 'transparent', color: !isHacking ? '#000' : C.text, border: `1px solid ${C.clean}`, borderRadius: 4 }}>
+          style={{ WebkitAppRegion: "no-drag", flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: !isHacking ? C.clean : 'transparent', color: !isHacking ? '#000' : C.text, border: `1px solid ${C.clean}`, borderRadius: 4 }}>
           NOT HACKING (CLEAN)
         </button>
         <button 
           onClick={() => setIsHacking(true)}
-          style={{ flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: isHacking ? C.cheat : 'transparent', color: isHacking ? '#fff' : C.text, border: `1px solid ${C.cheat}`, borderRadius: 4 }}>
+          style={{ WebkitAppRegion: "no-drag", flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: isHacking ? C.cheat : 'transparent', color: isHacking ? '#fff' : C.text, border: `1px solid ${C.cheat}`, borderRadius: 4 }}>
           HACKING (INJECT CHEATS)
         </button>
       </div>
@@ -217,8 +261,8 @@ export default function App() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.3 }} />
         <span style={{ color: C.bright, fontSize: 10, letterSpacing: 2 }}>ZK-GUARD</span>
-        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{clipName}</span>
-        <button onClick={() => setMini(true)} style={{ background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+        <span style={{ WebkitAppRegion: "drag", flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab" }}>{clipName}</span>
+        <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
       </div>
 
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
