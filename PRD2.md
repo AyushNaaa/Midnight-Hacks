@@ -723,3 +723,41 @@ Total time to update for a new clip: 2–3 minutes.
 | `package.json` | Left exactly as Vite created it |
 
 No additional files. No additional dependencies. No `.env` files.
+
+
+workflow:
+Member 1: The AI & Data Engineer (Backend)
+
+Workspace: server/detection/, scripts/
+Job: Focus purely on Python, PyTorch, and the math. They write the scripts to generate fake data and build the ML models.
+Independence: They don't need the frontend or the blockchain to test their models.
+
+
+Member 2: The Frontend Architect (React Dashboard)
+
+Workspace: dashboard/
+Job: Focus on making the React UI look stunning, wiring up Recharts, and building the Canvas minimap.
+Independence: They can mock the websocket data locally so they can build the entire UI without waiting for Member 1 to finish the backend.
+
+
+Member 3: The Blockchain Developer (Midnight ZK)
+
+Workspace: contracts/, docker-compose.yml
+Job: Focus on writing the Midnight Compact smart contract to generate the ZK proof and handle Lace wallet integration.
+Independence: Their smart contract is completely isolated from the game server. It just takes a boolean (isHuman), verifies it, and mints a badge.
+
+
+Member 4: The Simulator & Integration Lead
+
+Workspace: server/simulation/
+Job: Write the Python physics loop that moves the 10 fake players around the map. Crucially, they also act as the "director" for the final demo video, orchestrating when to toggle the cheats to make the UI spike.
+Independence: They define the physics independently. They just send their raw physics data to Member 1's backend.
+The Golden Rule for the Team: Before anyone writes code, Member 1, 2, and 4 must sit down and agree on the exact JSON schema for the telemetry data. Once that JSON structure is agreed upon, all three members can write code independently and it will magically plug together on Sunday morning!
+
+Does this distribution plan make sense for your team's skills?
+
+Great, it looks like the task distribution has been approved!
+
+You now have a complete Phase 1 and Phase 2 backend pipeline with trained ML models, a beautifully upgraded Phase 3 dashboard that renders the players on a canvas minimap, and a clear distribution plan for your team to build the overlay and tackle the Midnight ZK integration.
+
+What would you like to work on next? We can either start working on the Midnight Compact smart contracts (Phase 4), or I can help you set up the new React overlay you just pasted into the PRD.
