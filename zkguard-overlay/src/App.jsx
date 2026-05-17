@@ -185,7 +185,7 @@ export default function App() {
   const [isHacking, setIsHacking] = useState(false);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [tick, setTick] = useState(Math.floor(Math.random() * 40000) + 10000);
-  const [startTime] = useState(Date.now());
+  const [startTime, setStartTime] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
   // Opacity tracking
@@ -303,7 +303,7 @@ export default function App() {
         <h2 style={{ color: C.bright, letterSpacing: 2 }}>ZK-GUARD OVERLAY</h2>
         <p style={{ fontSize: 11, marginBottom: 20, color: C.dim }}>Ready to analyze clip: {clipName}</p>
         <button 
-          onClick={() => setProgramStarted(true)}
+          onClick={() => { setProgramStarted(true); setStartTime(Date.now()); }}
           style={{ WebkitAppRegion: "no-drag", background: C.clean, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
           START PROGRAM
         </button>
