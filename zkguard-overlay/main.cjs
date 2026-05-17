@@ -8,7 +8,7 @@ function createWindow () {
     alwaysOnTop: true,        // Keeps it above the game
     frame: false,             // Removes the OS window borders/titlebar
     transparent: true,        // Allows the background to be transparent
-    opacity: 0.75,            // Start translucent (less transparent)
+    opacity: 0.9,             // Start translucent (highly visible)
     resizable: true,
     webPreferences: {
       nodeIntegration: true,
@@ -18,6 +18,10 @@ function createWindow () {
 
   ipcMain.on('set-opacity', (event, opacity) => {
     mainWindow.setOpacity(opacity)
+  })
+
+  ipcMain.on('resize-window', (event, { width, height }) => {
+    mainWindow.setSize(width, height, true)
   })
 
   // Load the Vite dev server URL
