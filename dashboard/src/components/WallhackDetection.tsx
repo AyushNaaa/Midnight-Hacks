@@ -1,12 +1,8 @@
 /**
  * Wallhack Detection / Behavioral Mesh panel (§3.2 Module 2 + §3.5).
- * Placeholder minimap showing player positions.
- * TODO: Team members should add canvas-based minimap with:
- *   - Directional aim cones
- *   - Visibility arcs
- *   - Red pulsing edges for knowledge anomalies
- *   - Real-time 16fps update
+ * Canvas minimap showing player positions, aim cones, and anomaly tracking.
  */
+import { useEffect, useRef } from 'react';
 import type { DetectionResult } from '../types';
 
 interface Props {
@@ -14,53 +10,138 @@ interface Props {
 }
 
 export function WallhackDetection({ history }: Props) {
-  const latest = history[history.length - 1];
-  const players = latest?.players ?? [];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Canvas setup
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    // Clear background
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw map grid
+    ctx.strokeStyle = 'rgba(42, 42, 62, 0.5)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 10; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, (canvas.height / 10) * i);
+      ctx.lineTo(canvas.width, (canvas.height / 10) * i);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo((canvas.width / 10) * i, 0);
+      ctx.lineTo((canvas.width / 10) * i, canvas.height);
+      ctx.stroke();
+    }
+
+    // Draw walls
+    ctx.strokeStyle = '#3e3e5e';
+    ctx.lineWidth = 2;
+    // Horizontal
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height / 2);
+    ctx.lineTo(canvas.width * 0.45, canvas.height / 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(canvas.width * 0.55, canvas.height / 2);
+    ctx.lineTo(canvas.width, canvas.height / 2);
+    ctx.stroke();
+    // Vertical
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height * 0.45);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, canvas.height * 0.55);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+
+    const latest = history[history.length - 1];
+    if (!latest) return;
+    const players = latest.players;
+
+    // Helper to map 0-100 coords to canvas
+    const mapX = (x: number) => (x / 100) * canvas.width;
+    const mapY = (y: number) => (y / 100) * canvas.height;
+
+    // First pass: Draw tracking anomaly lines (wallhack snapping)
+    players.forEach(p => {
+      if (p.modules.wallhack > 0.5 && p.position) {
+        // Draw red line in aim direction indicating tracking through wall
+        const aimRad = (p.aim_yaw || 0) * (Math.PI / 180);
+        const px = mapX(p.position.x);
+        const py = mapY(p.position.y);
+        
+        ctx.strokeStyle = 'rgba(255, 71, 87, 0.4)'; // Red anomaly line
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(aimRad) * canvas.width, py + Math.sin(aimRad) * canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+
+    // Second pass: Draw players
+    players.forEach(p => {
+      if (!p.position) return;
+      
+      const num = parseInt(p.player_id.replace(/\D/g, ''), 10) || 0;
+      const isTeamA = num <= 5;
+      const px = mapX(p.position.x);
+      const py = mapY(p.position.y);
+      const aimRad = (p.aim_yaw || 0) * (Math.PI / 180);
+
+      // Draw aim cone
+      ctx.fillStyle = isTeamA ? 'rgba(0, 212, 255, 0.15)' : 'rgba(255, 71, 87, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.arc(px, py, 40, aimRad - 0.5, aimRad + 0.5);
+      ctx.lineTo(px, py);
+      ctx.fill();
+
+      // Draw player dot
+      ctx.fillStyle = isTeamA ? '#00d4ff' : '#ff4757';
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw cheating glow if high wallhack score
+      if (p.modules.wallhack > 0.8) {
+        ctx.strokeStyle = 'rgba(255, 71, 87, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 8 + Math.sin(Date.now() / 100) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Label
+      ctx.fillStyle = 'white';
+      ctx.font = '9px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText(`P${num}`, px, py - 8);
+    });
+
+  }, [history]);
 
   return (
-    <div className="bg-bg-card rounded-xl border border-border p-4">
-      <h3 className="text-sm font-semibold text-text-primary mb-3">👁 Wallhack / Behavioral Mesh</h3>
-      <div className="relative w-full aspect-square bg-bg-primary rounded-lg border border-border overflow-hidden">
-        {/* Simple grid */}
-        <div className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: 'linear-gradient(#2a2a3e 1px, transparent 1px), linear-gradient(90deg, #2a2a3e 1px, transparent 1px)',
-            backgroundSize: '10% 10%',
-          }}
+    <div className="bg-bg-card rounded-xl border border-border p-4 h-full flex flex-col">
+      <h3 className="text-sm font-semibold text-text-primary mb-3 shrink-0">👁 Wallhack / Behavioral Mesh</h3>
+      <div className="relative flex-1 w-full bg-bg-primary rounded-lg border border-border overflow-hidden min-h-[250px]">
+        <canvas 
+          ref={canvasRef} 
+          className="absolute inset-0 w-full h-full"
         />
-        {/* Map walls */}
-        <div className="absolute left-0 top-1/2 w-[45%] h-px bg-border" />
-        <div className="absolute left-[55%] top-1/2 w-[45%] h-px bg-border" />
-        <div className="absolute top-0 left-1/2 w-px h-[45%] bg-border" />
-        <div className="absolute top-[55%] left-1/2 w-px h-[45%] bg-border" />
-
-        {/* Player dots — placeholder positions */}
-        {players.map((p) => {
-          const isWallhack = p.modules.wallhack > 0.5;
-          const isCheating = p.verdict === 'cheating';
-          // Simple hash to get consistent positions per player
-          const num = parseInt(p.player_id.replace(/\D/g, ''), 10) || 0;
-          const team = num <= 5 ? 0 : 1;
-          const x = 10 + (num * 17) % 80;
-          const y = 10 + (num * 23) % 80;
-
-          return (
-            <div key={p.player_id} className="absolute" style={{ left: `${x}%`, top: `${y}%` }}>
-              <div
-                className={`w-3 h-3 rounded-full border-2 transition-all duration-300
-                  ${team === 0 ? 'bg-accent border-accent' : 'bg-danger border-danger'}
-                  ${isWallhack ? 'pulse-danger' : ''}`}
-                title={`${p.player_id} — wallhack: ${(p.modules.wallhack * 100).toFixed(0)}%`}
-              />
-              <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] text-text-secondary whitespace-nowrap">
-                {p.player_id.replace('player_', 'P')}
-              </span>
-            </div>
-          );
-        })}
       </div>
-      <p className="text-xs text-text-secondary mt-2">
-        TODO: Canvas minimap with aim cones, LOS arcs, anomaly edges
+      <p className="text-xs text-text-secondary mt-2 shrink-0">
+        Aim cones shown. Dashed red lines = spatial tracking anomaly (wallhack).
       </p>
     </div>
   );

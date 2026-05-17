@@ -37,6 +37,8 @@ export interface PlayerVerdict {
   verdict: 'clean' | 'suspicious' | 'cheating';
   confidence: number;
   modules: ModuleScores;
+  position?: { x: number; y: number };
+  aim_yaw?: number;
 }
 
 export interface DetectionResult {

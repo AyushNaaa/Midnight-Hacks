@@ -72,11 +72,10 @@ class MatchSimulator:
 
     async def run(self):
         """Main simulation loop — generates ticks and feeds to detection."""
-        from detection.engine import DetectionEngine
+        from api.shared import engine, cache_verdicts
         from api.dashboard_ws import broadcast_detection
 
         self.running = True
-        engine = DetectionEngine()
         tick_interval = 1.0 / self.TICK_RATE
 
         while self.running:
@@ -89,7 +88,9 @@ class MatchSimulator:
             # Build and send tick data every SEND_INTERVAL ticks
             if self.current_tick % self.SEND_INTERVAL == 0:
                 tick_data = self._build_tick_data()
+                engine._buffer_tick(tick_data)
                 result = engine.analyze(tick_data)
+                cache_verdicts(self.match_id, result.players)
                 await broadcast_detection(self.match_id, result)
 
             # Sleep to maintain tick rate

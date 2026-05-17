@@ -65,6 +65,9 @@ class PlayerVerdict(BaseModel):
     verdict: str = "clean"  # clean, suspicious, cheating
     confidence: float = 0.0
     modules: ModuleScores = ModuleScores()
+    # Add minimal state for dashboard visualization (Phase 3)
+    position: Vec2 = Vec2()
+    aim_yaw: float = 0.0
 
 
 class DetectionResult(BaseModel):

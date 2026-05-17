@@ -1,53 +1,95 @@
-"""Detection fusion engine — combines per-player + cross-player analysis.
+"""Detection fusion engine — combines per-player + cross-player analysis (§2D).
 
-Currently uses rules-based detection. 
-TODO: Replace with trained Transformer (Model A) + GAT (Model B) models.
+Combines heuristic rules with trained Transformer (Model A) + GAT (Model B) models.
 """
+import logging
 from api.schema import TickData, DetectionResult, PlayerVerdict, ModuleScores
 from detection.rules import RulesDetector
+from detection.models.transformer_inference import TransformerInference
+from detection.models.gat_inference import GATInference
+
+logger = logging.getLogger("zkguard.engine")
 
 
 class DetectionEngine:
-    """Main detection engine. Analyzes tick data and produces verdicts."""
+    """Main detection engine. Analyzes tick data and produces verdicts.
+
+    Maintains a sliding window of player states (128 ticks) for each
+    player in each match. Analysis uses the full window to detect
+    patterns over time rather than single-tick anomalies.
+    """
+
+    WINDOW_SIZE = 128  # ticks per analysis window (2 seconds at 64 tick/s)
 
     def __init__(self):
+        # Fallback heuristic rules
         self.rules = RulesDetector()
-        # TODO: Load trained Transformer model (Model A) — see §2A
-        # self.transformer = TransformerModel.load("models/transformer.pt")
-        # TODO: Load trained GAT model (Model B) — see §2B
-        # self.gat = GATModel.load("models/gat.pt")
+        
+        # Load trained ML Models
+        self.transformer = TransformerInference()
+        self.gat = GATInference()
 
-        # Per-player tick history for windowed analysis
+        # Per-player tick history: match_id -> player_id -> [PlayerState, ...]
         self.history: dict[str, dict[str, list]] = {}
-        self.window_size = 128
+
+    def _buffer_tick(self, tick_data: TickData) -> None:
+        """Buffer player states into the sliding window."""
+        match_id = tick_data.match_id
+
+        if match_id not in self.history:
+            self.history[match_id] = {}
+
+        for player in tick_data.players:
+            pid = player.player_id
+            if pid not in self.history[match_id]:
+                self.history[match_id][pid] = []
+            self.history[match_id][pid].append(player)
+            # Trim to window size
+            if len(self.history[match_id][pid]) > self.WINDOW_SIZE:
+                self.history[match_id][pid] = self.history[match_id][pid][-self.WINDOW_SIZE:]
 
     def analyze(self, tick_data: TickData) -> DetectionResult:
         """Analyze a tick and return detection results for all players."""
         match_id = tick_data.match_id
 
         if match_id not in self.history:
-            self.history[match_id] = {}
+            self._buffer_tick(tick_data)
 
-        # Update history
-        for player in tick_data.players:
-            pid = player.player_id
-            if pid not in self.history[match_id]:
-                self.history[match_id][pid] = []
-            self.history[match_id][pid].append(player)
-            if len(self.history[match_id][pid]) > self.window_size:
-                self.history[match_id][pid] = self.history[match_id][pid][-self.window_size:]
+        # Run GAT inference on the current tick (Cross-player analysis)
+        gat_scores = self.gat.predict(tick_data)
 
         # Run detection on each player
         verdicts = []
         for player in tick_data.players:
             pid = player.player_id
-            history = self.history[match_id].get(pid, [])
-            scores = self.rules.analyze_player(player, history, tick_data)
+            history = self.history.get(match_id, {}).get(pid, [])
+            
+            # 1. Heuristic Rules fallback
+            rule_scores = self.rules.analyze_player(player, history, tick_data)
+            
+            # 2. Transformer inference (Per-player sequence analysis)
+            tf_scores = self.transformer.predict(history)
+            
+            # 3. Get GAT scores for this player
+            g_scores = gat_scores.get(pid, {"wallhack": 0.0, "collab": 0.0})
+
+            # Sensor Fusion: Combine predictions
+            # If the ML model says cheating, we trust it. If it's untrained (0.5), we fall back to rules.
+            fused_scores = ModuleScores(
+                aim=max(rule_scores.aim, tf_scores["aim"]),
+                reaction=max(rule_scores.reaction, tf_scores["reaction"]),
+                macro=max(rule_scores.macro, tf_scores["macro"]),
+                speed=max(rule_scores.speed, tf_scores["speed"]),
+                tracking=max(rule_scores.tracking, tf_scores["tracking"]),
+                wallhack=max(rule_scores.wallhack, g_scores["wallhack"]),
+                collab=max(rule_scores.collab, g_scores["collab"])
+            )
 
             max_score = max(
-                scores.aim, scores.reaction, scores.macro,
-                scores.speed, scores.tracking, scores.wallhack, scores.collab
+                fused_scores.aim, fused_scores.reaction, fused_scores.macro,
+                fused_scores.speed, fused_scores.tracking, fused_scores.wallhack, fused_scores.collab
             )
+            
             if max_score > 0.8:
                 verdict = "cheating"
             elif max_score > 0.5:
@@ -59,7 +101,9 @@ class DetectionEngine:
                 player_id=pid,
                 verdict=verdict,
                 confidence=min(max_score * 1.2, 1.0),
-                modules=scores,
+                modules=fused_scores,
+                position={"x": player.position.x, "y": player.position.y},
+                aim_yaw=player.aim.yaw,
             ))
 
         return DetectionResult(
