@@ -1,4 +1,4 @@
-# ZK-Guard
+# Aegis
 
 **Server-side AI anticheat — as accurate as Vanguard, zero invasion of your machine, privacy-proven on Midnight.**
 
