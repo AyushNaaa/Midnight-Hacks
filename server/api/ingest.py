@@ -66,8 +66,8 @@ async def telemetry_ws(websocket: WebSocket, match_id: str):
                 })
                 continue
 
-            # --- Buffer into engine history (sliding window) ---
-            engine._buffer_tick(tick_data)
+            # --- Buffer into engine + analyze at intervals ---
+            engine.buffer_tick(tick_data)
             tick_buffers[match_id] = tick_buffers.get(match_id, 0) + 1
 
             # --- Analyze at regular intervals ---
