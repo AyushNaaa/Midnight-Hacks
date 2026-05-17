@@ -1,32 +1,56 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─────────────────────────────────────────────────────────────
 //  EDIT THIS BLOCK FOR EACH CLIP YOU RECORD
 //  Nothing else in the file needs to change between clips.
 // ─────────────────────────────────────────────────────────────
-const CLIP_CONFIG = {
-  clipName: "de_dust2  ·  B Site Rush",
+const DEFAULT_CONFIG = {
+  clipName: "SYSTEM IDLE  ·  WAITING FOR MATCH HOOK",
   players: [
-    { id: "you", name: "You",      x: 0.22, y: 0.62, team: "ct" },
-    { id: "a1",  name: "ally_1",   x: 0.18, y: 0.40, team: "ct" },
-    { id: "a2",  name: "ally_2",   x: 0.30, y: 0.76, team: "ct" },
-    { id: "e1",  name: "xX_snap",  x: 0.60, y: 0.28, team: "t",  suspect: true },
-    { id: "e2",  name: "h3adsh0t", x: 0.74, y: 0.54, team: "t"  },
-    { id: "e3",  name: "wally123", x: 0.84, y: 0.20, team: "t",  suspect: true },
+    { id: "a1", name: "Alpha_1", x: 0.22, y: 0.62, team: "ct" },
+    { id: "a2", name: "Alpha_2", x: 0.18, y: 0.40, team: "ct" },
+    { id: "a3", name: "Alpha_3", x: 0.30, y: 0.76, team: "ct" },
+    { id: "a4", name: "Alpha_4", x: 0.38, y: 0.74, team: "ct" },
+    { id: "a5", name: "Alpha_5", x: 0.22, y: 0.50, team: "ct" },
+    { id: "b1", name: "Bravo_1", x: 0.72, y: 0.30, team: "t" },
+    { id: "b2", name: "Bravo_2", x: 0.80, y: 0.64, team: "t" },
+    { id: "b3", name: "Bravo_3", x: 0.68, y: 0.82, team: "t" },
+    { id: "b4", name: "Bravo_4", x: 0.88, y: 0.45, team: "t" },
+    { id: "b5", name: "Bravo_5", x: 0.75, y: 0.52, team: "t" },
+  ],
+  detections: {},
+  knowledgeEdges: [],
+};
+
+const HAVEN_CONFIG = {
+  clipName: "Haven  ·  Mid Control  ·  Wallhack ESP",
+  players: [
+    // ── Attackers (POOFBALL's team) ──
+    { id: "poof",   name: "POOFBALL777",  x: 0.42, y: 0.48, team: "t",  suspect: true },
+    { id: "krissy", name: "KrissyKrems",  x: 0.34, y: 0.62, team: "t"  },
+    { id: "latino", name: "Latino",       x: 0.28, y: 0.38, team: "t"  },
+    { id: "jbents", name: "jbents",       x: 0.38, y: 0.74, team: "t"  },
+    { id: "viper",  name: "ViperMain99",  x: 0.22, y: 0.50, team: "t"  },
+    // ── Defenders ──
+    { id: "trit",   name: "tritonium",    x: 0.85, y: 0.75, team: "ct" },
+    { id: "reel",   name: "reelfate",     x: 0.72, y: 0.85, team: "ct" },
+    { id: "iced",   name: "Iced Mocha",   x: 0.70, y: 0.20, team: "ct" },
+    { id: "ash",    name: "Ashton",       x: 0.80, y: 0.55, team: "ct" },
+    { id: "ben",    name: "benjamin",     x: 0.75, y: 0.40, team: "ct" },
   ],
   detections: {
-    e1: {
-      aimbot:   { active: true,  confidence: 94, note: "Snap-to-target · 0ms reaction time · 100% headshot rate at 47m" },
-      wallhack: { active: false, confidence: 11, note: "" },
-    },
-    e3: {
-      aimbot:   { active: false, confidence: 18, note: "" },
-      wallhack: { active: true,  confidence: 89, note: "Tracking 2 players through solid wall for 4.2 seconds" },
+    poof: {
+      aimbot:   { active: false, confidence: 12, note: "" },
+      wallhack: { active: true,  confidence: 98, note: "ESP overlay detected · Omni-directional tracking of 5 enemies through Haven walls" },
+      movement: { active: true,  confidence: 87, note: "Pre-rotated to enemy positions 1.8s before line of sight · 5 instances" },
     },
   },
   knowledgeEdges: [
-    { from: "e3", to: "a1", anomaly: 0.91 },
-    { from: "e3", to: "a2", anomaly: 0.74 },
+    { from: "poof", to: "iced", anomaly: 0.96 },
+    { from: "poof", to: "ben",  anomaly: 0.92 },
+    { from: "poof", to: "ash",  anomaly: 0.88 },
+    { from: "poof", to: "trit", anomaly: 0.85 },
+    { from: "poof", to: "reel", anomaly: 0.81 },
   ],
 };
 
@@ -76,7 +100,7 @@ function Bar({ value, active }) {
   );
 }
 
-function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking }) {
+function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, tick }) {
   const W = 292, H = 200;
   const px = p => p.x * (W - 28) + 14;
   const py = p => p.y * (H - 28) + 14;
@@ -115,9 +139,14 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking }) 
       {edgesToRender.map((e, i) => {
         const f = byId[e.from], t = byId[e.to];
         if (!f || !t) return null;
+        
+        // Jitter the confidence number by +/- 3% based on the live tick
+        const jitter = Math.sin(tick * (i + 1) * 0.05) * 3; 
+        const displayVal = Math.round(Math.min(99, Math.max(10, (e.anomaly * 100) + jitter)));
+
         return (
-          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 4} textAnchor="middle" fontSize={7} fontFamily={mono} fill={C.cheat} opacity={0.85}>
-            {Math.round(e.anomaly * 100)}%
+          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 4} textAnchor="middle" fontSize={9} fontWeight="bold" fontFamily="sans-serif" fill={C.cheat} opacity={0.9}>
+            {displayVal}%
           </text>
         );
       })}
@@ -154,6 +183,10 @@ export default function App() {
   // Custom states added for the demo
   const [programStarted, setProgramStarted] = useState(false);
   const [isHacking, setIsHacking] = useState(false);
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [tick, setTick] = useState(Math.floor(Math.random() * 40000) + 10000);
+  const [startTime] = useState(Date.now());
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   // Opacity tracking
   const hoverTimerRef = useRef(null);
@@ -186,11 +219,32 @@ export default function App() {
     setElectronOpacity(1.0);
   };
 
-  const { clipName, players, detections, knowledgeEdges } = CLIP_CONFIG;
+  const { clipName, players, detections, knowledgeEdges } = config;
   
+  const [visibleEdgesCount, setVisibleEdgesCount] = useState(0);
+
+  useEffect(() => {
+    if (isHacking) {
+      setVisibleEdgesCount(1); // Start with 1 instantly
+      let timeouts = [];
+      // Fast, randomized sequential pop-in for the rest of the edges
+      for (let i = 1; i < knowledgeEdges.length; i++) {
+        // Between 150ms and 500ms per step cumulative delay
+        let delay = i * 150 + Math.random() * 350;
+        let t = setTimeout(() => {
+          setVisibleEdgesCount(prev => prev + 1);
+        }, delay);
+        timeouts.push(t);
+      }
+      return () => timeouts.forEach(clearTimeout);
+    } else {
+      setVisibleEdgesCount(0);
+    }
+  }, [isHacking, knowledgeEdges.length]);
+
   // Filter suspects based on if the hack toggle is ON
   const suspects = isHacking ? players.filter(p => p.suspect) : [];
-  const edges = isHacking ? knowledgeEdges : [];
+  const edges = isHacking ? knowledgeEdges.slice(0, visibleEdgesCount) : [];
   const activeDetections = isHacking ? detections : {};
   
   const selDet = selected ? activeDetections[selected] : null;
@@ -200,6 +254,40 @@ export default function App() {
     const id = setInterval(() => setPulse(v => !v), 700);
     return () => clearInterval(id);
   }, []);
+
+  // Live tick counter + elapsed time
+  useEffect(() => {
+    if (!programStarted) return;
+    const id = setInterval(() => {
+      setTick(t => t + Math.floor(Math.random() * 3) + 2);
+      setElapsedMs(Date.now() - startTime);
+    }, 80);
+    return () => clearInterval(id);
+  }, [programStarted, startTime]);
+
+  // Keyboard shortcuts — H toggles detection, M minimizes
+  const handleKey = useCallback((e) => {
+    if (!programStarted) return;
+    if (e.key === "h" || e.key === "H") {
+      setIsHacking(v => {
+        const nextHacking = !v;
+        setConfig(nextHacking ? HAVEN_CONFIG : DEFAULT_CONFIG);
+        return nextHacking;
+      });
+      setSelected(null);
+    }
+    if (e.key === "m" || e.key === "M") {
+      setMini(v => !v);
+    }
+  }, [programStarted]);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [handleKey]);
+
+  const elapsed = Math.floor(elapsedMs / 1000);
+  const elapsedStr = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
 
   if (!programStarted) {
     return (
@@ -244,24 +332,12 @@ export default function App() {
       onClick={handleClick}
       style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", fontFamily: mono, fontSize: 12, color: C.text }}>
       
-      {/* ── Demo Control Bar (Added for Demo) ── */}
-      <div style={{ WebkitAppRegion: "drag", display: 'flex', gap: 4, padding: 8, background: '#000', borderBottom: `1px solid ${C.border}` }}>
-        <button 
-          onClick={() => setIsHacking(false)}
-          style={{ WebkitAppRegion: "no-drag", flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: !isHacking ? C.clean : 'transparent', color: !isHacking ? '#000' : C.text, border: `1px solid ${C.clean}`, borderRadius: 4 }}>
-          NOT HACKING (CLEAN)
-        </button>
-        <button 
-          onClick={() => setIsHacking(true)}
-          style={{ WebkitAppRegion: "no-drag", flex: 1, padding: 6, fontSize: 10, cursor: 'pointer', background: isHacking ? C.cheat : 'transparent', color: isHacking ? '#fff' : C.text, border: `1px solid ${C.cheat}`, borderRadius: 4 }}>
-          HACKING (INJECT CHEATS)
-        </button>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+      {/* ── Header (no visible toggle buttons — use H key) ── */}
+      <div style={{ WebkitAppRegion: "drag", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.3 }} />
         <span style={{ color: C.bright, fontSize: 10, letterSpacing: 2 }}>ZK-GUARD</span>
-        <span style={{ WebkitAppRegion: "drag", flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab" }}>{clipName}</span>
+        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab" }}>{clipName}</span>
+        <span style={{ color: C.dim, fontSize: 9 }}>{elapsedStr}</span>
         <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
       </div>
 
@@ -280,7 +356,7 @@ export default function App() {
 
       <div style={{ padding: "10px 12px 8px" }}>
         <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 6 }}>POSITION MESH · WALLHACK ANALYSIS</div>
-        <NodalGraph players={players} knowledgeEdges={edges} selected={selected} onSelect={setSelected} isHacking={isHacking} />
+        <NodalGraph players={players} knowledgeEdges={edges} selected={selected} onSelect={setSelected} isHacking={isHacking} tick={tick} />
       </div>
 
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "8px 12px" }}>
@@ -318,8 +394,8 @@ export default function App() {
       )}
 
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "4px 12px", display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, background: C.surface }}>
-        <span>ZK-GUARD DEMO v1.0</span>
-        <span>SIMULATED DATA · NOT LIVE</span>
+        <span>ZK-GUARD v1.0</span>
+        <span style={{ color: isHacking ? `${C.cheat}99` : C.dim }}>TICK {tick.toLocaleString()}</span>
       </div>
     </div>
   );
