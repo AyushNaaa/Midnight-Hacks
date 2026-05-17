@@ -174,47 +174,53 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
   );
 }
 
-// ── CONNECTION STATUS WIDGET ──
-function ConnectionWidget({ pulse }) {
+// ── JERK KINEMATICS GRAPH ──
+function JerkGraph({ isHacking }) {
+  const [dataPoints, setDataPoints] = useState(Array(52).fill(0));
+
+  useEffect(() => {
+    // Generate new data point every 100ms
+    const interval = setInterval(() => {
+      setDataPoints(prev => {
+        const newData = [...prev];
+        if (newData.length >= 52) newData.shift();
+        
+        // Base smooth movement
+        let nextVal = Math.random() * 15 + 5; 
+        
+        // If hacking, introduce sharp aimbot snaps (jerk)
+        if (isHacking && Math.random() > 0.6) {
+          nextVal = 75 + Math.random() * 25; // Massive spikes
+        }
+        
+        newData.push(nextVal);
+        return newData;
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isHacking]);
+
+  // SVG drawing logic: map 52 points over 102% width, then smoothly translate left by 2%
+  const pointsString = dataPoints.map((val, i) => `${i * 2},${100 - (val / 100) * 100}`).join(" ");
+  
   return (
-    <div style={{ 
-      display: "flex", 
-      alignItems: "center", 
-      justifyContent: "space-between", 
-      background: C.card, 
-      borderBottom: `1px solid ${C.border}`, 
-      padding: "12px 16px", 
-    }}>
-      
-      {/* Left Node: Game Client */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-        <div style={{ position: "relative", width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.05)", border: `1px solid rgba(255,255,255,0.1)`, display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.text, opacity: 0.8 }} />
-        </div>
-        <span style={{ fontSize: 8, color: C.dim, letterSpacing: 1, fontWeight: 600 }}>CLIENT</span>
-      </div>
-
-      {/* Connection Line */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 16px" }}>
-        <div style={{ fontSize: 8, color: C.clean, letterSpacing: 2, marginBottom: 6, fontWeight: 700 }}>
-          <span style={{ opacity: pulse ? 1 : 0.4, transition: "opacity 0.3s ease" }}>●</span> SECURE HOOK
-        </div>
-        <div style={{ width: "100%", height: 2, background: `linear-gradient(90deg, transparent, ${C.clean}66, transparent)`, position: "relative" }}>
-          <div style={{ position: "absolute", top: -2, left: "50%", transform: "translateX(-50%)", width: 6, height: 6, borderRadius: "50%", background: C.clean, boxShadow: `0 0 8px ${C.clean}` }} />
-          {/* Animated data packets */}
-          <div style={{ position: "absolute", top: 0, left: pulse ? "20%" : "80%", width: 16, height: 2, background: C.clean, boxShadow: `0 0 10px ${C.clean}`, transition: "left 0.7s ease-in-out", borderRadius: 2 }} />
-        </div>
-      </div>
-
-      {/* Right Node: Aegis Engine */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-        <div style={{ position: "relative", width: 24, height: 24, borderRadius: 6, background: `${C.bright}11`, border: `1px solid ${C.bright}44`, display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.bright, boxShadow: `0 0 10px ${C.bright}`, opacity: pulse ? 1 : 0.6, transition: "opacity 0.7s ease" }} />
-        </div>
-        <span style={{ fontSize: 8, color: C.bright, letterSpacing: 1, fontWeight: 600 }}>AEGIS_CORE</span>
-      </div>
-
-    </div>
+     <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.card, animation: "slideDown 0.3s ease-out" }}>
+       <div style={{ fontSize: 9, color: C.dim, marginBottom: 8, display: "flex", justifyContent: "space-between", fontWeight: 600, letterSpacing: 1 }}>
+         <span>MOUSE KINEMATICS (JERK)</span>
+         <span style={{ color: C.danger, textShadow: `0 0 8px ${C.danger}` }}>
+           ANOMALOUS SNAP DETECTED
+         </span>
+       </div>
+       <div style={{ width: "100%", height: 60, position: "relative", background: "rgba(0,0,0,0.3)", borderRadius: 4, overflow: "hidden", border: `1px solid ${C.border}` }}>
+         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+           <g style={{ transform: 'translateX(-2px)', transition: 'transform 100ms linear' }}>
+             <polyline points={pointsString} fill="none" stroke={C.danger} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+           </g>
+           {/* Reference threshold line */}
+           <line x1="0" y1="33" x2="100" y2="33" stroke={C.danger} strokeWidth="1" strokeDasharray="4 4" opacity={0.5} />
+         </svg>
+       </div>
+     </div>
   );
 }
 
@@ -459,14 +465,14 @@ export default function App() {
       
       {/* ── Header ── */}
       <div style={{ WebkitAppRegion: "drag", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.3 }} />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: C.clean, boxShadow: `0 0 8px ${C.clean}`, opacity: pulse ? 1 : 0.4 }} />
         <span style={{ color: C.bright, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>AEGIS</span>
         <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab", fontWeight: 500 }}>{clipName}</span>
         <span style={{ color: C.dim, fontSize: 10, fontWeight: 600 }}>{elapsedStr}</span>
         <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1 }}>×</button>
       </div>
 
-      <ConnectionWidget pulse={pulse} />
+      {suspects.length > 0 && <JerkGraph isHacking={true} />}
 
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
         {[
