@@ -54,23 +54,54 @@ const HAVEN_CONFIG = {
   ],
 };
 
-// ── THEME COLORS (Aegis Orange / Dark SaaS) ──
-const C = {
-  bg:      "rgba(5, 6, 8, 0.95)",
-  surface: "transparent",
-  card:    "rgba(255, 255, 255, 0.02)",
-  border:  "rgba(244, 127, 36, 0.25)",
-  dim:     "#8b949e",
-  text:    "#f8f9fa",
-  bright:  "#F47F24", // Aegis Orange
-  clean:   "#22cc66",
-  warn:    "#ffaa22",
-  cheat:   "#ff3344",
-  ct:      "#3399ff",
-  t:       "#ff7733",
+const OW_CONFIG = {
+  clipName: "Rialto  ·  Payload Attack  ·  Wallhack ESP",
+  players: [
+    // ── Attackers (Cheater's team) ──
+    { id: "widowmaker", name: "SpideySenses", x: 0.20, y: 0.80, team: "t", suspect: true },
+    { id: "mercy",      name: "HealPlz",      x: 0.15, y: 0.85, team: "t" },
+    { id: "rein",       name: "ShieldMan",    x: 0.35, y: 0.75, team: "t" },
+    { id: "genji",      name: "IneedHealing", x: 0.40, y: 0.60, team: "t" },
+    { id: "ana",        name: "Grandma",      x: 0.10, y: 0.90, team: "t" },
+    // ── Defenders ──
+    { id: "tracer",     name: "Blinky",       x: 0.60, y: 0.40, team: "ct" },
+    { id: "zenyatta",   name: "Peace",        x: 0.85, y: 0.30, team: "ct" },
+    { id: "sigma",      name: "Gravity",      x: 0.70, y: 0.50, team: "ct" },
+    { id: "baptiste",   name: "Lamp",         x: 0.80, y: 0.45, team: "ct" },
+    { id: "soldier",    name: "RunGunn",      x: 0.65, y: 0.35, team: "ct" },
+  ],
+  detections: {
+    widowmaker: {
+      aimbot:   { active: true,  confidence: 95, note: "Micro-flicks locking to heads within 15ms · 8 instances" },
+      wallhack: { active: true,  confidence: 99, note: "Tracking Tracer's blinks through solid geometry perfectly" },
+      movement: { active: false, confidence: 20, note: "" },
+    },
+  },
+  knowledgeEdges: [
+    { from: "widowmaker", to: "tracer",   anomaly: 0.98 },
+    { from: "widowmaker", to: "zenyatta", anomaly: 0.91 },
+    { from: "widowmaker", to: "soldier",  anomaly: 0.85 },
+  ],
 };
 
-const fontMain = "'Inter', sans-serif";
+// ── THEME COLORS (Tuff, Modern, Sleek, Monochrome heavy) ──
+const C = {
+  bg:      "#000000",
+  surface: "#09090b",
+  card:    "#18181b",
+  border:  "rgba(255,255,255,0.08)",
+  dim:     "#a1a1aa",
+  text:    "#fafafa",
+  bright:  "#ffffff", 
+  clean:   "#10b981", 
+  warn:    "#f59e0b",
+  cheat:   "#ef4444",
+  ct:      "#3b82f6",
+  t:       "#f97316",
+};
+
+const fontMain = "'Inter', -apple-system, sans-serif";
+const fontMono = "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace";
 
 function Bar({ value, active }) {
   const color = active
@@ -82,19 +113,19 @@ function Bar({ value, active }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{
-        flex: 1, height: 2,
-        background: C.border,
-        borderRadius: 1,
+        flex: 1, height: 4,
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 2,
         overflow: "hidden",
       }}>
         <div style={{
           width: `${value}%`,
           height: "100%",
           background: color,
-          borderRadius: 1,
         }} />
       </div>
-      <span style={{ fontSize: 10, color, minWidth: 32, textAlign: "right", fontFamily: fontMain, fontWeight: 600 }}>
+      <span style={{ fontSize: 10, color, minWidth: 28, textAlign: "right", fontFamily: fontMono, fontWeight: 500 }}>
         {value}%
       </span>
     </div>
@@ -110,11 +141,11 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
   const edgesToRender = isHacking ? knowledgeEdges : [];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", borderRadius: 4, background: C.card, border: `1px solid ${C.border}` }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", borderRadius: 6, background: C.surface, border: `1px solid ${C.border}` }}>
       {[1, 2, 3].map(i => (
         <g key={i}>
-          <line x1={i * W / 4} y1={0} x2={i * W / 4} y2={H} stroke={C.border} strokeWidth={0.5} />
-          <line x1={0} y1={i * H / 4} x2={W} y2={i * H / 4} stroke={C.border} strokeWidth={0.5} />
+          <line x1={i * W / 4} y1={0} x2={i * W / 4} y2={H} stroke="rgba(255,255,255,0.03)" strokeWidth={1} />
+          <line x1={0} y1={i * H / 4} x2={W} y2={i * H / 4} stroke="rgba(255,255,255,0.03)" strokeWidth={1} />
         </g>
       ))}
 
@@ -127,11 +158,11 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
             x1={px(f)} y1={py(f)}
             x2={px(t)} y2={py(t)}
             stroke={C.cheat}
-            strokeWidth={e.anomaly * 2 + 0.5}
-            strokeOpacity={0.4 + e.anomaly * 0.5}
-            strokeDasharray="5 4"
+            strokeWidth={1.5}
+            strokeOpacity={0.6 + e.anomaly * 0.4}
+            strokeDasharray="4 4"
           >
-            <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.9s" repeatCount="indefinite" />
+            <animate attributeName="stroke-dashoffset" from="0" to="-16" dur="1s" repeatCount="indefinite" />
           </line>
         );
       })}
@@ -144,7 +175,7 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
         const displayVal = Math.round(Math.min(99, Math.max(10, (e.anomaly * 100) + jitter)));
 
         return (
-          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 4} textAnchor="middle" fontSize={10} fontWeight="700" fontFamily={fontMain} fill={C.cheat} opacity={0.9}>
+          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 6} textAnchor="middle" fontSize={9} fontWeight="500" fontFamily={fontMono} fill={C.cheat}>
             {displayVal}%
           </text>
         );
@@ -159,14 +190,11 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
         return (
           <g key={p.id} onClick={() => onSelect(p.id === selected ? null : p.id)} style={{ cursor: "pointer" }}>
             {isSuspect && (
-              <circle cx={x} cy={y} r={10} fill="none" stroke={C.cheat} strokeWidth={1}>
-                <animate attributeName="r" values="9;14;9" dur="1.8s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
-              </circle>
+              <circle cx={x} cy={y} r={10} fill="rgba(239, 68, 68, 0.1)" stroke={C.cheat} strokeWidth={1} />
             )}
-            {isSel && <circle cx={x} cy={y} r={9} fill="none" stroke={C.text} strokeWidth={1.5} strokeDasharray="3 2" />}
-            <circle cx={x} cy={y} r={5} fill={nodeColor} opacity={1} />
-            <text x={x + 8} y={y + 3.5} fontSize={8.5} fontWeight="600" fontFamily={fontMain} fill={isSuspect ? C.cheat : C.text}>{p.name}</text>
+            {isSel && <circle cx={x} cy={y} r={8} fill="none" stroke={C.text} strokeWidth={1} strokeDasharray="2 2" />}
+            <circle cx={x} cy={y} r={4} fill={nodeColor} />
+            <text x={x + 8} y={y + 3} fontSize={9} fontWeight="500" fontFamily={fontMono} fill={isSuspect ? C.cheat : C.dim}>{p.name}</text>
           </g>
         );
       })}
@@ -176,23 +204,21 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
 
 // ── JERK KINEMATICS GRAPH ──
 function JerkGraph({ isHacking }) {
-  const [dataPoints, setDataPoints] = useState(Array(52).fill(0));
+  const [dataPoints, setDataPoints] = useState([]);
 
   useEffect(() => {
-    // Generate new data point every 100ms
     const interval = setInterval(() => {
       setDataPoints(prev => {
         const newData = [...prev];
-        if (newData.length >= 52) newData.shift();
+        if (newData.length > 50) newData.shift();
         
-        // Base smooth movement
-        let nextVal = Math.random() * 15 + 5; 
+        let nextVal = Math.random() * 100; 
         
-        // If hacking, introduce sharp aimbot snaps (jerk)
-        if (isHacking && Math.random() > 0.6) {
-          nextVal = 75 + Math.random() * 25; // Massive spikes
+        if (isHacking && Math.random() > 0.5) {
+          nextVal = 90 + Math.random() * 10; 
         }
         
+        if (newData.length === 0) return [nextVal];
         newData.push(nextVal);
         return newData;
       });
@@ -200,27 +226,63 @@ function JerkGraph({ isHacking }) {
     return () => clearInterval(interval);
   }, [isHacking]);
 
-  // SVG drawing logic: map 52 points over 102% width, then smoothly translate left by 2%
-  const pointsString = dataPoints.map((val, i) => `${i * 2},${100 - (val / 100) * 100}`).join(" ");
+  const pointsString = dataPoints.map((val, i) => `${(i / 50) * 100},${100 - (val / 120) * 100}`).join(" ");
   
   return (
-     <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.border}`, background: C.card, animation: "slideDown 0.3s ease-out" }}>
-       <div style={{ fontSize: 9, color: C.dim, marginBottom: 8, display: "flex", justifyContent: "space-between", fontWeight: 600, letterSpacing: 1 }}>
-         <span>MOUSE KINEMATICS (JERK)</span>
-         <span style={{ color: C.danger, textShadow: `0 0 8px ${C.danger}` }}>
-           ANOMALOUS SNAP DETECTED
+     <div style={{ padding: "16px", borderBottom: `1px solid ${C.border}`, background: C.surface }}>
+       <div style={{ fontSize: 10, color: C.dim, marginBottom: 12, display: "flex", justifyContent: "space-between", fontFamily: fontMono }}>
+         <span>KINEMATIC_JERK_HZ</span>
+         <span style={{ color: isHacking ? C.cheat : C.clean }}>
+           {isHacking ? "ANOMALOUS" : "NOMINAL"}
          </span>
        </div>
-       <div style={{ width: "100%", height: 60, position: "relative", background: "rgba(0,0,0,0.3)", borderRadius: 4, overflow: "hidden", border: `1px solid ${C.border}` }}>
+       <div style={{ width: "100%", height: 48, position: "relative", background: C.card, borderRadius: 4, overflow: "hidden", border: `1px solid ${C.border}` }}>
          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-           <g style={{ transform: 'translateX(-2px)', transition: 'transform 100ms linear' }}>
-             <polyline points={pointsString} fill="none" stroke={C.danger} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-           </g>
-           {/* Reference threshold line */}
-           <line x1="0" y1="33" x2="100" y2="33" stroke={C.danger} strokeWidth="1" strokeDasharray="4 4" opacity={0.5} />
+           <polyline points={pointsString} fill="none" stroke={isHacking ? C.cheat : C.dim} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+           <line x1="0" y1="33" x2="100" y2="33" stroke={C.cheat} strokeWidth="1" strokeDasharray="4 4" opacity={0.4} />
          </svg>
        </div>
      </div>
+  );
+}
+
+// ── MIDNIGHT ZK-PROOF WIDGET ──
+function MidnightWidget({ isHacking, pulse }) {
+  const [hash, setHash] = useState("0x...");
+  useEffect(() => {
+    const int = setInterval(() => {
+      setHash("0x" + Math.random().toString(16).substring(2, 10).toUpperCase() + "..." + Math.random().toString(16).substring(2, 6).toUpperCase());
+    }, isHacking ? 800 : 3000);
+    return () => clearInterval(int);
+  }, [isHacking]);
+
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px", background: C.bg }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 8, height: 8, background: "#8b5cf6", borderRadius: "50%" }} />
+          <span style={{ fontSize: 10, color: "#a78bfa", fontFamily: fontMono, fontWeight: 600 }}>MIDNIGHT_LEDGER</span>
+        </div>
+        <span style={{ fontSize: 9, color: C.dim, padding: "2px 6px", background: C.card, borderRadius: 4, border: `1px solid ${C.border}`, fontFamily: fontMono }}>COMPACT_SC</span>
+      </div>
+      
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, fontFamily: fontMono, fontSize: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: C.dim }}>VERDICT_RECORD</span>
+          <span style={{ color: isHacking ? C.cheat : C.clean }}>
+            {isHacking ? "FLAGGED_ANOMALY" : "SESSION_CLEAN"}
+          </span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: C.dim }}>DATA_EXPOSURE</span>
+          <span style={{ color: C.dim }}>ZERO_KNOWLEDGE</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ color: C.dim }}>RECEIPT_HASH</span>
+          <span style={{ color: "#a78bfa", opacity: pulse ? 1 : 0.6, transition: "opacity 0.2s" }}>{hash}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -304,25 +366,25 @@ export default function App() {
     if (mini) {
       setElectronWindow(110, 110);
     } else {
-      setElectronWindow(320, 680); // Adjusted height for their original overlay + connection widget
+      setElectronWindow(320, 720);
     }
   }, [mini]);
 
   const handleMouseEnter = () => {
     clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
-      setElectronOpacity(0.99); // 0.99 instead of 1.0 prevents macOS from clipping the top pixel of the border
+      setElectronOpacity(1.0);
     }, 2000);
   };
 
   const handleMouseLeave = () => {
     clearTimeout(hoverTimerRef.current);
-    setElectronOpacity(0.85); // Make it slightly translucent but fully visible
+    setElectronOpacity(0.9);
   };
 
   const handleClick = () => {
     clearTimeout(hoverTimerRef.current);
-    setElectronOpacity(0.99);
+    setElectronOpacity(1.0);
   };
 
   const { clipName, players, detections, knowledgeEdges } = config;
@@ -377,6 +439,14 @@ export default function App() {
       });
       setSelected(null);
     }
+    if (e.key === "j" || e.key === "J") {
+      setIsHacking(v => {
+        const nextHacking = !v;
+        setConfig(nextHacking ? OW_CONFIG : DEFAULT_CONFIG);
+        return nextHacking;
+      });
+      setSelected(null);
+    }
     if (e.key === "m" || e.key === "M") {
       setMini(v => !v);
     }
@@ -398,17 +468,17 @@ export default function App() {
         onClick={handleClick}
         style={{
         WebkitAppRegion: "drag",
-        width: 320, padding: 24, background: C.bg, border: `1px solid ${C.border}`,
-        borderRadius: 12, fontFamily: fontMain, color: C.text, textAlign: 'center', boxShadow: `0 32px 64px rgba(0,0,0,0.8)`
+        width: 320, padding: 32, background: C.bg, border: `1px solid ${C.border}`,
+        borderRadius: 8, fontFamily: fontMain, color: C.text, textAlign: 'center', boxShadow: `0 24px 48px rgba(0,0,0,0.5)`
       }}>
-        <h2 style={{ color: C.bright, letterSpacing: 2, fontWeight: 700 }}>AEGIS_GUARD</h2>
-        <p style={{ fontSize: 11, marginBottom: 20, color: C.dim }}>Ready to analyze clip: {clipName}</p>
+        <h2 style={{ color: C.text, letterSpacing: 1, fontWeight: 500, fontSize: 16 }}>AEGIS_GUARD</h2>
+        <p style={{ fontSize: 11, marginBottom: 32, color: C.dim, fontFamily: fontMono }}>READY TO ANALYZE</p>
         <button 
-          onClick={() => { setProgramStarted(true); setElectronWindow(320, 680); setStartTime(Date.now()); }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.textShadow = `0 0 12px ${C.bright}`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = C.bright; e.currentTarget.style.textShadow = 'none'; }}
-          style={{ WebkitAppRegion: "no-drag", background: "transparent", color: C.bright, border: `1px solid ${C.border}`, padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 2, transition: 'all 0.2s ease' }}>
-          [ INITIALIZE ENGINE ]
+          onClick={() => { setProgramStarted(true); setElectronWindow(320, 720); setStartTime(Date.now()); }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = C.text; e.currentTarget.style.color = C.bg; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.text; }}
+          style={{ WebkitAppRegion: "no-drag", background: "transparent", color: C.text, border: `1px solid ${C.border}`, padding: '12px 24px', borderRadius: 4, cursor: 'pointer', fontWeight: 500, fontSize: 11, letterSpacing: 1, transition: 'all 0.15s ease', fontFamily: fontMono, width: "100%" }}>
+          INITIALIZE ENGINE
         </button>
       </div>
     );
@@ -420,36 +490,21 @@ export default function App() {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={{ 
-          width: "100%", 
-          height: "100%", 
-          display: "flex",
-          flexDirection: "column",
-          boxSizing: "border-box", 
-          justifyContent: "center", 
-          alignItems: "center",
-          background: "transparent"
+          width: "100%", height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box", justifyContent: "center", alignItems: "center", background: "transparent"
         }}>
         
         <div 
           onMouseDown={handleLogoDown}
           style={{
-            width: 48, 
-            height: 48, 
-            borderRadius: 12, 
-            background: C.bg, 
-            border: `1px solid ${C.bright}`, 
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            boxShadow: `0 8px 24px rgba(244, 127, 36, 0.3)`,
-            cursor: "pointer",
-            transition: "box-shadow 0.2s ease, filter 0.2s ease"
+            width: 64, height: 64, borderRadius: 12, background: C.bg, border: `1px solid ${C.border}`, 
+            display: "flex", justifyContent: "center", alignItems: "center",
+            boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5)`, cursor: "pointer", transition: "all 0.2s ease"
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 12px 32px rgba(244, 127, 36, 0.7)`; e.currentTarget.style.filter = "brightness(1.2)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = `0 8px 24px rgba(244, 127, 36, 0.3)`; e.currentTarget.style.filter = "brightness(1)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = C.card; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = C.bg; }}
         >
-          <img src="/logo.png" alt="AEGIS" style={{ width: "85%", height: "85%", objectFit: "contain", filter: `drop-shadow(0 0 4px ${C.bright}66)`, pointerEvents: "none" }} 
-            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="color:#F47F24;font-weight:700;font-size:12px;">AEGIS</span>'; }}
+          <img src="/logo.png" alt="AEGIS" style={{ width: "60%", height: "60%", objectFit: "contain", pointerEvents: "none", opacity: 0.8, filter: "grayscale(100%) brightness(200%)" }} 
+            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="color:#fff;font-weight:500;font-size:12px;">AEGIS</span>'; }}
           />
         </div>
       </div>
@@ -461,49 +516,48 @@ export default function App() {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
-      style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", fontFamily: fontMain, fontSize: 12, color: C.text, boxShadow: `0 32px 64px rgba(0,0,0,0.8)` }}>
+      style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", fontFamily: fontMain, fontSize: 12, color: C.text, boxShadow: `0 24px 48px rgba(0,0,0,0.5)` }}>
       
       {/* ── Header ── */}
-      <div style={{ WebkitAppRegion: "drag", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: C.clean, boxShadow: `0 0 8px ${C.clean}`, opacity: pulse ? 1 : 0.4 }} />
-        <span style={{ color: C.bright, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>AEGIS</span>
-        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab", fontWeight: 500 }}>{clipName}</span>
-        <span style={{ color: C.dim, fontSize: 10, fontWeight: 600 }}>{elapsedStr}</span>
-        <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1 }}>×</button>
+      <div style={{ WebkitAppRegion: "drag", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.4 }} />
+        <span style={{ color: C.text, fontSize: 12, fontWeight: 500, letterSpacing: 1 }}>AEGIS</span>
+        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab", fontFamily: fontMono }}>{clipName}</span>
+        <span style={{ color: C.dim, fontSize: 10, fontFamily: fontMono }}>{elapsedStr}</span>
+        <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 16, padding: "0 4px", lineHeight: 1 }}>×</button>
       </div>
 
-      {suspects.length > 0 && <JerkGraph isHacking={true} />}
+      <JerkGraph isHacking={suspects.length > 0} />
 
-      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, background: C.bg }}>
         {[
           { val: suspects.length,       label: "SUSPECTS",  color: suspects.length > 0 ? C.cheat : C.dim },
           { val: players.length,        label: "PLAYERS",   color: C.text },
           { val: edges.length, label: "ANOMALIES", color: edges.length > 0 ? C.warn : C.dim },
         ].map((s, i) => (
-          <div key={i} style={{ flex: 1, padding: "10px 0", textAlign: "center", borderLeft: i > 0 ? `1px solid ${C.border}` : "none" }}>
-            <div style={{ fontSize: 20, fontWeight: "700", color: s.color, lineHeight: 1.2 }}>{s.val}</div>
-            <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1, marginTop: 2, fontWeight: 600 }}>{s.label}</div>
+          <div key={i} style={{ flex: 1, padding: "16px 0", textAlign: "center", borderLeft: i > 0 ? `1px solid ${C.border}` : "none" }}>
+            <div style={{ fontSize: 16, fontFamily: fontMono, color: s.color, lineHeight: 1.2 }}>{s.val}</div>
+            <div style={{ fontSize: 9, color: C.dim, marginTop: 4, fontFamily: fontMono }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ padding: "12px 14px 10px" }}>
-        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>POSITION MESH · WALLHACK ANALYSIS</div>
+      <div style={{ padding: "16px", background: C.surface }}>
+        <div style={{ fontSize: 10, color: C.dim, marginBottom: 12, fontFamily: fontMono }}>TOPOLOGY_MESH</div>
         <NodalGraph players={players} knowledgeEdges={edges} selected={selected} onSelect={setSelected} isHacking={isHacking} tick={tick} />
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 14px" }}>
-        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>PLAYER STATUS</div>
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px", background: C.bg }}>
+        <div style={{ fontSize: 10, color: C.dim, marginBottom: 12, fontFamily: fontMono }}>ENTITY_STATUS</div>
         {players.map(p => {
           const det = activeDetections[p.id];
           const flagged = det && Object.values(det).some(d => d.active);
-          const topConf = det ? Math.max(...Object.values(det).map(d => d.confidence)) : 0;
           return (
-            <div key={p.id} onClick={() => det && setSelected(selected === p.id ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", marginBottom: 2, borderRadius: 4, cursor: det ? "pointer" : "default", background: selected === p.id ? C.card : "transparent", border: `1px solid ${selected === p.id ? C.border : "transparent"}` }}>
+            <div key={p.id} onClick={() => det && setSelected(selected === p.id ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px", marginBottom: 4, borderRadius: 4, cursor: det ? "pointer" : "default", background: selected === p.id ? C.card : "transparent", border: `1px solid ${selected === p.id ? C.border : "transparent"}`, transition: "all 0.1s" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: p.team === "ct" ? C.ct : C.t }} />
-              <span style={{ flex: 1, color: flagged ? C.bright : C.text, fontSize: 11, fontWeight: 600 }}>{p.name}</span>
-              <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 4, fontWeight: 700, color: flagged ? C.cheat : det ? C.text : C.dim, background: flagged ? `${C.cheat}18` : "transparent", border: `1px solid ${flagged ? `${C.cheat}40` : C.border}` }}>
-                {flagged ? "FLAGGED" : det ? `${topConf}%` : "CLEAN"}
+              <span style={{ flex: 1, color: flagged ? C.text : C.dim, fontSize: 11, fontFamily: fontMono }}>{p.name}</span>
+              <span style={{ fontSize: 9, fontFamily: fontMono, color: flagged ? C.cheat : det ? C.text : C.dim }}>
+                {flagged ? "FLAGGED" : det ? "ANALYZING" : "NOMINAL"}
               </span>
             </div>
           );
@@ -511,24 +565,26 @@ export default function App() {
       </div>
 
       {selDet && selPlayer && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 14px", background: C.card }}>
-          <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 12, fontWeight: 600 }}>ANALYSIS · {selPlayer.name.toUpperCase()}</div>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px", background: C.surface }}>
+          <div style={{ fontSize: 10, color: C.dim, marginBottom: 16, fontFamily: fontMono }}>INSPECTION_{selPlayer.id.toUpperCase()}</div>
           {Object.entries(selDet).map(([mod, d]) => (
-            <div key={mod} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: d.active ? C.cheat : C.text, fontWeight: 600 }}>{mod}</span>
-                {d.active && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, fontWeight: 700, color: C.cheat, border: `1px solid ${C.cheat}` }}>DETECTED</span>}
+            <div key={mod} style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, color: d.active ? C.cheat : C.dim, fontFamily: fontMono }}>{mod}</span>
+                {d.active && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, color: C.bg, background: C.cheat, fontFamily: fontMono }}>DETECTED</span>}
               </div>
               <Bar value={d.confidence} active={d.active} />
-              {d.note && d.active && <div style={{ fontSize: 10, color: C.dim, marginTop: 4, lineHeight: 1.4, fontWeight: 500 }}>{d.note}</div>}
+              {d.note && d.active && <div style={{ fontSize: 10, color: C.dim, marginTop: 8, lineHeight: 1.5 }}>{d.note}</div>}
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "6px 14px", display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, background: C.surface, fontWeight: 600 }}>
-        <span>AEGIS ENGINE v1.0</span>
-        <span style={{ color: isHacking ? `${C.cheat}99` : C.dim }}>TICK {tick.toLocaleString()}</span>
+      <MidnightWidget isHacking={isHacking} pulse={pulse} />
+
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 16px", display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, background: C.surface, fontFamily: fontMono }}>
+        <span>AEGIS_ENGINE_V3</span>
+        <span style={{ color: isHacking ? C.cheat : C.dim }}>TICK_{tick.toLocaleString()}</span>
       </div>
     </div>
   );
