@@ -739,6 +739,8 @@ Workspace: dashboard/
 Job: Focus on making the React UI look stunning, wiring up Recharts, and building the Canvas minimap.
 Independence: They can mock the websocket data locally so they can build the entire UI without waiting for Member 1 to finish the backend.
 
+slip it in me bro
+
 
 Member 3: The Blockchain Developer (Midnight ZK)
 
