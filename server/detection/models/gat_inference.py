@@ -1,17 +1,34 @@
 """GAT Inference Wrapper (§2B)
 
 Loads the trained BehavioralMeshGAT and provides inference over the game tick data.
+Constructs a PyTorch Geometric graph from TickData with expanded features:
+  Node features (12): position, velocity, aim, health, visibility, team, alive
+  Edge features (4):  distance, angle_from_aim, LOS, time_since_visible
 """
 import torch
+import math
 import os
 from torch_geometric.data import Data
 from detection.models.gat import BehavioralMeshGAT
 from api.schema import TickData
 
+
+def _get_device() -> torch.device:
+    """Select the best available device (CUDA > MPS > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class GATInference:
     def __init__(self, weight_path="detection/models/weights/gat_v1.pt"):
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-        self.model = BehavioralMeshGAT(node_features=5, edge_features=2, hidden_channels=32, heads=4, out_classes=2)
+        self.device = _get_device()
+        self.model = BehavioralMeshGAT(
+            node_features=12, edge_features=4,
+            hidden_channels=32, heads=4, out_classes=2,
+        )
         
         abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", weight_path))
         
@@ -24,26 +41,46 @@ class GATInference:
         self.model.to(self.device)
         self.model.eval()
 
-    def construct_graph(self, tick_data: TickData) -> Data | None:
-        """Construct a PyTorch Geometric Data object from the TickData."""
+    def construct_graph(self, tick_data: TickData) -> tuple[Data, dict[str, int]] | None:
+        """Construct a PyTorch Geometric Data object from the TickData.
+
+        Returns:
+            Tuple of (Data, pid_to_idx mapping) or None if no players.
+        """
         if not tick_data.players:
             return None
             
         num_players = len(tick_data.players)
         
-        # Build node features
+        # Build node features (12 per player)
         x = []
         pid_to_idx = {}
         for idx, p in enumerate(tick_data.players):
             pid_to_idx[p.player_id] = idx
-            # Node features: [x, y, vx, vy, team]
-            # Since we don't have explicit team in schema, we approximate (e.g. by spawn side or just 0)
-            team = 0.0 # Placeholder
-            x.append([p.position.x, p.position.y, p.velocity.x, p.velocity.y, team])
+
+            # Count how many players can see this player
+            visible_to_count = len(p.visible_to)
+
+            # Node features: [x, y, vx, vy, aim_pitch, aim_yaw, aim_dx, aim_dy,
+            #                  health, visible_to_count, team, is_alive]
+            # Team is approximated from player_id convention or defaults to 0
+            team = 0.0  # Will be overridden if team info available
+            is_alive = 1.0 if p.health > 0 else 0.0
+
+            x.append([
+                p.position.x, p.position.y,
+                p.velocity.x, p.velocity.y,
+                p.aim.pitch, p.aim.yaw,
+                p.aim_delta.x, p.aim_delta.y,
+                p.health / 100.0,  # Normalize health
+                float(visible_to_count),
+                team,
+                is_alive,
+            ])
             
         x = torch.tensor(x, dtype=torch.float32)
         
-        # Build edges
+        # Build edges (fully connected, excluding self)
         edge_index = []
         edge_attr = []
         
@@ -52,12 +89,28 @@ class GATInference:
                 if i != j:
                     edge_index.append([i, j])
                     
+                    # Distance (normalized)
                     dx = p1.position.x - p2.position.x
                     dy = p1.position.y - p2.position.y
-                    dist = (dx**2 + dy**2)**0.5
+                    dist = math.sqrt(dx ** 2 + dy ** 2)
                     
+                    # Angle from p1's aim to p2
+                    angle_to_p2 = math.degrees(math.atan2(dy, dx)) if (dx != 0 or dy != 0) else 0.0
+                    aim_angle = p1.aim.yaw
+                    angle_diff = abs((angle_to_p2 - aim_angle + 180) % 360 - 180)
+                    
+                    # Line of sight
                     has_los = 1.0 if p1.player_id in p2.visible_to else 0.0
-                    edge_attr.append([dist / 100.0, has_los])
+                    
+                    # Time since visible (approximated — 0 if currently visible, else 1.0)
+                    time_since = 0.0 if has_los > 0.5 else 1.0
+                    
+                    edge_attr.append([
+                        dist / 100.0,          # Normalized distance
+                        angle_diff / 180.0,    # Normalized angle difference
+                        has_los,
+                        time_since,
+                    ])
                     
         if not edge_index:
             return None

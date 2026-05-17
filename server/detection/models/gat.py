@@ -3,6 +3,10 @@
 Models all 10 players as nodes with edges representing line-of-sight and distance.
 Detects collaborative cheating (sharing hidden information) and wallhacks
 by identifying anomalies in spatial awareness relative to valid graph edges.
+
+Node features (12): [x, y, vx, vy, aim_pitch, aim_yaw, aim_dx, aim_dy,
+                      health, visible_to_count, team, is_alive]
+Edge features (4):  [distance, angle_from_aim, is_LOS, time_since_visible]
 """
 import torch
 import torch.nn as nn
@@ -11,8 +15,8 @@ from torch_geometric.nn import GATConv, global_mean_pool
 class BehavioralMeshGAT(nn.Module):
     def __init__(
         self, 
-        node_features: int = 5,  # [x, y, vx, vy, team]
-        edge_features: int = 2,  # [distance, has_line_of_sight]
+        node_features: int = 12,
+        edge_features: int = 4,
         hidden_channels: int = 32, 
         heads: int = 4,
         out_classes: int = 2     # [wallhack_prob, collab_prob]

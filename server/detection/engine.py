@@ -52,8 +52,8 @@ class DetectionEngine:
         """Analyze a tick and return detection results for all players."""
         match_id = tick_data.match_id
 
-        if match_id not in self.history:
-            self._buffer_tick(tick_data)
+        # Always buffer the tick first — before any analysis
+        self._buffer_tick(tick_data)
 
         # Run GAT inference on the current tick (Cross-player analysis)
         gat_scores = self.gat.predict(tick_data)
