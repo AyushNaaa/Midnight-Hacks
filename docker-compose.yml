@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  midnight-node:
+    image: midnightntwrk/node:latest
+    ports:
+      - "9944:9944" # RPC
+      - "9933:9933" # WS
+    environment:
+      - NETWORK=devnet
+    # Required for M1/M2/M3 Apple Silicon Macs to run x86 images if no native arm64 image is available
+    platform: linux/amd64
+    
+  proof-server:
+    image: midnightntwrk/proof-server:latest
+    ports:
+      - "9432:9432"
+    platform: linux/amd64
+    depends_on:
+      - midnight-node
+
+  graphql-indexer:
+    image: midnightntwrk/graphql-indexer:latest
+    ports:
+      - "4000:4000"
+    platform: linux/amd64
+    depends_on:
+      - midnight-node

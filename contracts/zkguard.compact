@@ -1,39 +1,42 @@
 // ZK-Guard Compact Smart Contract (§4.1)
 // Midnight ZK proof verification + session badge minting.
 //
-// TODO: Implement when Midnight tooling is available.
-// See PRD §4.1 for full contract spec.
-//
-// ledger {
-//   verifiedSessions: Map<Bytes32, VerificationRecord>;
-// }
-//
-// struct VerificationRecord {
-//   isVerified: Boolean;
-//   timestamp:  Uint64;
-//   sessionId:  Bytes32;
-// }
-//
-// circuit verifyHumanity(
-//   private isHuman:   Boolean,
-//   public  sessionId: Bytes32
-// ): Boolean {
-//   assert(isHuman == true);
-//   return true;
-// }
-//
-// export transaction mintBadge(
-//   proof:     Proof<verifyHumanity>,
-//   sessionId: Bytes32
-// ): Void {
-//   verify(verifyHumanity, proof, sessionId);
-//   verifiedSessions.set(sessionId, VerificationRecord {
-//     isVerified: true,
-//     timestamp:  ledger.blockTime,
-//     sessionId:  sessionId,
-//   });
-// }
-//
-// export query isVerified(sessionId: Bytes32): Boolean {
-//   return verifiedSessions.lookup(sessionId)?.isVerified ?? false;
-// }
+// This circuit takes a private boolean (isHuman) and asserts it is true.
+// The raw telemetry is never published to the ledger.
+
+ledger {
+  verifiedSessions: Map<Bytes32, VerificationRecord>;
+}
+
+struct VerificationRecord {
+  isVerified: Boolean;
+  timestamp:  Uint64;
+  sessionId:  Bytes32;
+}
+
+circuit verifyHumanity(
+  private isHuman:   Boolean,
+  public  sessionId: Bytes32
+): Boolean {
+  assert(isHuman == true, "Player behavior flagged as non-human (cheating).");
+  return true;
+}
+
+export transaction mintBadge(
+  proof:     Proof<verifyHumanity>,
+  sessionId: Bytes32
+): Void {
+  // 1. Verify the ZK proof on-chain
+  verify(verifyHumanity, proof, sessionId);
+  
+  // 2. If valid, mint the verification badge in the ledger
+  verifiedSessions.set(sessionId, VerificationRecord {
+    isVerified: true,
+    timestamp:  ledger.blockTime,
+    sessionId:  sessionId,
+  });
+}
+
+export query isVerified(sessionId: Bytes32): Boolean {
+  return verifiedSessions.lookup(sessionId)?.isVerified ?? false;
+}
