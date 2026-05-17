@@ -24,6 +24,10 @@ function createWindow () {
     mainWindow.setSize(width, height, true)
   })
 
+  ipcMain.on('move-window', (event, { x, y }) => {
+    mainWindow.setPosition(x, y)
+  })
+
   // Load the Vite dev server URL
   mainWindow.loadURL('http://localhost:5173')
 

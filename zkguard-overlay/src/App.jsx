@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import "./index.css"; 
 
 // ─────────────────────────────────────────────────────────────
-//  EDIT THIS BLOCK FOR EACH CLIP YOU RECORD
-//  Nothing else in the file needs to change between clips.
+//  CONFIG
 // ─────────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
   clipName: "SYSTEM IDLE  ·  WAITING FOR MATCH HOOK",
@@ -54,14 +54,15 @@ const HAVEN_CONFIG = {
   ],
 };
 
+// ── THEME COLORS (Aegis Orange / Dark SaaS) ──
 const C = {
-  bg:      "#07090e",
-  surface: "#0b0e18",
-  card:    "#0f1320",
-  border:  "#182030",
-  dim:     "#38485e",
-  text:    "#6a8aaa",
-  bright:  "#b0cce8",
+  bg:      "rgba(5, 6, 8, 0.95)",
+  surface: "transparent",
+  card:    "rgba(255, 255, 255, 0.02)",
+  border:  "rgba(244, 127, 36, 0.25)",
+  dim:     "#8b949e",
+  text:    "#f8f9fa",
+  bright:  "#F47F24", // Aegis Orange
   clean:   "#22cc66",
   warn:    "#ffaa22",
   cheat:   "#ff3344",
@@ -69,7 +70,7 @@ const C = {
   t:       "#ff7733",
 };
 
-const mono = "'Courier New', Courier, monospace";
+const fontMain = "'Inter', sans-serif";
 
 function Bar({ value, active }) {
   const color = active
@@ -93,7 +94,7 @@ function Bar({ value, active }) {
           borderRadius: 1,
         }} />
       </div>
-      <span style={{ fontSize: 10, color, minWidth: 32, textAlign: "right", fontFamily: mono }}>
+      <span style={{ fontSize: 10, color, minWidth: 32, textAlign: "right", fontFamily: fontMain, fontWeight: 600 }}>
         {value}%
       </span>
     </div>
@@ -106,11 +107,10 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
   const py = p => p.y * (H - 28) + 14;
   const byId = Object.fromEntries(players.map(p => [p.id, p]));
 
-  // Only show red knowledge edges and suspect rings if isHacking is true
   const edgesToRender = isHacking ? knowledgeEdges : [];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", borderRadius: 4, background: C.surface }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", borderRadius: 4, background: C.card, border: `1px solid ${C.border}` }}>
       {[1, 2, 3].map(i => (
         <g key={i}>
           <line x1={i * W / 4} y1={0} x2={i * W / 4} y2={H} stroke={C.border} strokeWidth={0.5} />
@@ -140,12 +140,11 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
         const f = byId[e.from], t = byId[e.to];
         if (!f || !t) return null;
         
-        // Jitter the confidence number by +/- 3% based on the live tick
         const jitter = Math.sin(tick * (i + 1) * 0.05) * 3; 
         const displayVal = Math.round(Math.min(99, Math.max(10, (e.anomaly * 100) + jitter)));
 
         return (
-          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 4} textAnchor="middle" fontSize={9} fontWeight="bold" fontFamily="sans-serif" fill={C.cheat} opacity={0.9}>
+          <text key={`lbl-${i}`} x={(px(f) + px(t)) / 2} y={(py(f) + py(t)) / 2 - 4} textAnchor="middle" fontSize={10} fontWeight="700" fontFamily={fontMain} fill={C.cheat} opacity={0.9}>
             {displayVal}%
           </text>
         );
@@ -160,18 +159,62 @@ function NodalGraph({ players, knowledgeEdges, selected, onSelect, isHacking, ti
         return (
           <g key={p.id} onClick={() => onSelect(p.id === selected ? null : p.id)} style={{ cursor: "pointer" }}>
             {isSuspect && (
-              <circle cx={x} cy={y} r={9} fill="none" stroke={C.cheat} strokeWidth={0.8}>
-                <animate attributeName="r" values="8;13;8" dur="1.8s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.7;0.1;0.7" dur="1.8s" repeatCount="indefinite" />
+              <circle cx={x} cy={y} r={10} fill="none" stroke={C.cheat} strokeWidth={1}>
+                <animate attributeName="r" values="9;14;9" dur="1.8s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
               </circle>
             )}
-            {isSel && <circle cx={x} cy={y} r={8} fill="none" stroke={C.bright} strokeWidth={1} strokeDasharray="3 2" />}
-            <circle cx={x} cy={y} r={4.5} fill={nodeColor} opacity={0.9} />
-            <text x={x + 7} y={y + 3.5} fontSize={7.5} fontFamily={mono} fill={isSuspect ? C.cheat : C.text}>{p.name}</text>
+            {isSel && <circle cx={x} cy={y} r={9} fill="none" stroke={C.text} strokeWidth={1.5} strokeDasharray="3 2" />}
+            <circle cx={x} cy={y} r={5} fill={nodeColor} opacity={1} />
+            <text x={x + 8} y={y + 3.5} fontSize={8.5} fontWeight="600" fontFamily={fontMain} fill={isSuspect ? C.cheat : C.text}>{p.name}</text>
           </g>
         );
       })}
     </svg>
+  );
+}
+
+// ── CONNECTION STATUS WIDGET ──
+function ConnectionWidget({ pulse }) {
+  return (
+    <div style={{ 
+      display: "flex", 
+      alignItems: "center", 
+      justifyContent: "space-between", 
+      background: C.card, 
+      borderBottom: `1px solid ${C.border}`, 
+      padding: "12px 16px", 
+    }}>
+      
+      {/* Left Node: Game Client */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div style={{ position: "relative", width: 24, height: 24, borderRadius: 6, background: "rgba(255,255,255,0.05)", border: `1px solid rgba(255,255,255,0.1)`, display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.text, opacity: 0.8 }} />
+        </div>
+        <span style={{ fontSize: 8, color: C.dim, letterSpacing: 1, fontWeight: 600 }}>CLIENT</span>
+      </div>
+
+      {/* Connection Line */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 16px" }}>
+        <div style={{ fontSize: 8, color: C.clean, letterSpacing: 2, marginBottom: 6, fontWeight: 700 }}>
+          <span style={{ opacity: pulse ? 1 : 0.4, transition: "opacity 0.3s ease" }}>●</span> SECURE HOOK
+        </div>
+        <div style={{ width: "100%", height: 2, background: `linear-gradient(90deg, transparent, ${C.clean}66, transparent)`, position: "relative" }}>
+          <div style={{ position: "absolute", top: -2, left: "50%", transform: "translateX(-50%)", width: 6, height: 6, borderRadius: "50%", background: C.clean, boxShadow: `0 0 8px ${C.clean}` }} />
+          {/* Animated data packets */}
+          <div style={{ position: "absolute", top: 0, left: pulse ? "20%" : "80%", width: 16, height: 2, background: C.clean, boxShadow: `0 0 10px ${C.clean}`, transition: "left 0.7s ease-in-out", borderRadius: 2 }} />
+        </div>
+      </div>
+
+      {/* Right Node: Aegis Engine */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div style={{ position: "relative", width: 24, height: 24, borderRadius: 6, background: `${C.bright}11`, border: `1px solid ${C.bright}44`, display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.bright, boxShadow: `0 0 10px ${C.bright}`, opacity: pulse ? 1 : 0.6, transition: "opacity 0.7s ease" }} />
+        </div>
+        <span style={{ fontSize: 8, color: C.bright, letterSpacing: 1, fontWeight: 600 }}>AEGIS_CORE</span>
+      </div>
+
+    </div>
   );
 }
 
@@ -188,6 +231,9 @@ export default function App() {
   const [startTime, setStartTime] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
+  // Custom drag tracking state
+  const [dragState, setDragState] = useState(null);
+
   // Opacity tracking
   const hoverTimerRef = useRef(null);
 
@@ -196,27 +242,81 @@ export default function App() {
       try {
         const { ipcRenderer } = window.require('electron');
         ipcRenderer.send('set-opacity', val);
-      } catch (e) {
-        // Ignore if not running in Electron
-      }
+      } catch (e) {}
     }
   };
+
+  const setElectronWindow = (width, height) => {
+    if (window.require) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        ipcRenderer.send('resize-window', { width, height });
+      } catch (e) {}
+    }
+  };
+
+  const handleLogoDown = (e) => {
+    setDragState({
+      startX: e.screenX,
+      startY: e.screenY,
+      offsetX: e.clientX,
+      offsetY: e.clientY
+    });
+  };
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const handleMove = (e) => {
+      if (window.require) {
+        const newX = e.screenX - dragState.offsetX;
+        const newY = e.screenY - dragState.offsetY;
+        window.require('electron').ipcRenderer.send('move-window', { x: newX, y: newY });
+      }
+    };
+
+    const handleUp = (e) => {
+      const dx = Math.abs(e.screenX - dragState.startX);
+      const dy = Math.abs(e.screenY - dragState.startY);
+      if (dx < 4 && dy < 4) {
+        setMini(false);
+      }
+      setDragState(null);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [dragState]);
+
+  // Resize window appropriately
+  useEffect(() => {
+    if (mini) {
+      setElectronWindow(110, 110);
+    } else {
+      setElectronWindow(320, 680); // Adjusted height for their original overlay + connection widget
+    }
+  }, [mini]);
 
   const handleMouseEnter = () => {
     clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
-      setElectronOpacity(1.0);
+      setElectronOpacity(0.99); // 0.99 instead of 1.0 prevents macOS from clipping the top pixel of the border
     }, 2000);
   };
 
   const handleMouseLeave = () => {
     clearTimeout(hoverTimerRef.current);
-    setElectronOpacity(0.75);
+    setElectronOpacity(0.85); // Make it slightly translucent but fully visible
   };
 
   const handleClick = () => {
     clearTimeout(hoverTimerRef.current);
-    setElectronOpacity(1.0);
+    setElectronOpacity(0.99);
   };
 
   const { clipName, players, detections, knowledgeEdges } = config;
@@ -227,9 +327,7 @@ export default function App() {
     if (isHacking) {
       setVisibleEdgesCount(1); // Start with 1 instantly
       let timeouts = [];
-      // Fast, randomized sequential pop-in for the rest of the edges
       for (let i = 1; i < knowledgeEdges.length; i++) {
-        // Between 150ms and 500ms per step cumulative delay
         let delay = i * 150 + Math.random() * 350;
         let t = setTimeout(() => {
           setVisibleEdgesCount(prev => prev + 1);
@@ -242,7 +340,6 @@ export default function App() {
     }
   }, [isHacking, knowledgeEdges.length]);
 
-  // Filter suspects based on if the hack toggle is ON
   const suspects = isHacking ? players.filter(p => p.suspect) : [];
   const edges = isHacking ? knowledgeEdges.slice(0, visibleEdgesCount) : [];
   const activeDetections = isHacking ? detections : {};
@@ -255,7 +352,6 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Live tick counter + elapsed time
   useEffect(() => {
     if (!programStarted) return;
     const id = setInterval(() => {
@@ -265,7 +361,6 @@ export default function App() {
     return () => clearInterval(id);
   }, [programStarted, startTime]);
 
-  // Keyboard shortcuts — H toggles detection, M minimizes
   const handleKey = useCallback((e) => {
     if (!programStarted) return;
     if (e.key === "h" || e.key === "H") {
@@ -297,15 +392,17 @@ export default function App() {
         onClick={handleClick}
         style={{
         WebkitAppRegion: "drag",
-        width: 320, padding: 20, background: C.bg, border: `1px solid ${C.border}`,
-        borderRadius: 8, fontFamily: mono, color: C.text, textAlign: 'center'
+        width: 320, padding: 24, background: C.bg, border: `1px solid ${C.border}`,
+        borderRadius: 12, fontFamily: fontMain, color: C.text, textAlign: 'center', boxShadow: `0 32px 64px rgba(0,0,0,0.8)`
       }}>
-        <h2 style={{ color: C.bright, letterSpacing: 2 }}>ZK-GUARD OVERLAY</h2>
+        <h2 style={{ color: C.bright, letterSpacing: 2, fontWeight: 700 }}>AEGIS_GUARD</h2>
         <p style={{ fontSize: 11, marginBottom: 20, color: C.dim }}>Ready to analyze clip: {clipName}</p>
         <button 
-          onClick={() => { setProgramStarted(true); setStartTime(Date.now()); }}
-          style={{ WebkitAppRegion: "no-drag", background: C.clean, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
-          START PROGRAM
+          onClick={() => { setProgramStarted(true); setElectronWindow(320, 680); setStartTime(Date.now()); }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.textShadow = `0 0 12px ${C.bright}`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = C.bright; e.currentTarget.style.textShadow = 'none'; }}
+          style={{ WebkitAppRegion: "no-drag", background: "transparent", color: C.bright, border: `1px solid ${C.border}`, padding: '10px 20px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 2, transition: 'all 0.2s ease' }}>
+          [ INITIALIZE ENGINE ]
         </button>
       </div>
     );
@@ -316,11 +413,39 @@ export default function App() {
       <div 
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onClick={(e) => { handleClick(); setMini(false); }} 
-        style={{ WebkitAppRegion: "drag", display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 14px", background: C.bg, border: `1px solid ${suspects.length > 0 ? C.cheat : C.border}44`, borderRadius: 20, cursor: "pointer", fontFamily: mono, fontSize: 11, color: suspects.length > 0 ? C.cheat : C.text, userSelect: "none" }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", display: "inline-block", background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.25, flexShrink: 0 }} />
-        ZK-GUARD · {suspects.length} SUSPECT{suspects.length !== 1 ? "S" : ""}
-        <span style={{ color: C.dim, fontSize: 10, marginLeft: 4 }}>▲ expand</span>
+        style={{ 
+          width: "100%", 
+          height: "100%", 
+          display: "flex",
+          flexDirection: "column",
+          boxSizing: "border-box", 
+          justifyContent: "center", 
+          alignItems: "center",
+          background: "transparent"
+        }}>
+        
+        <div 
+          onMouseDown={handleLogoDown}
+          style={{
+            width: 48, 
+            height: 48, 
+            borderRadius: 12, 
+            background: C.bg, 
+            border: `1px solid ${C.bright}`, 
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            boxShadow: `0 8px 24px rgba(244, 127, 36, 0.3)`,
+            cursor: "pointer",
+            transition: "box-shadow 0.2s ease, filter 0.2s ease"
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 12px 32px rgba(244, 127, 36, 0.7)`; e.currentTarget.style.filter = "brightness(1.2)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = `0 8px 24px rgba(244, 127, 36, 0.3)`; e.currentTarget.style.filter = "brightness(1)"; }}
+        >
+          <img src="/logo.png" alt="AEGIS" style={{ width: "85%", height: "85%", objectFit: "contain", filter: `drop-shadow(0 0 4px ${C.bright}66)`, pointerEvents: "none" }} 
+            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="color:#F47F24;font-weight:700;font-size:12px;">AEGIS</span>'; }}
+          />
+        </div>
       </div>
     );
   }
@@ -330,46 +455,48 @@ export default function App() {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
-      style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", fontFamily: mono, fontSize: 12, color: C.text }}>
+      style={{ width: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", fontFamily: fontMain, fontSize: 12, color: C.text, boxShadow: `0 32px 64px rgba(0,0,0,0.8)` }}>
       
-      {/* ── Header (no visible toggle buttons — use H key) ── */}
+      {/* ── Header ── */}
       <div style={{ WebkitAppRegion: "drag", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: suspects.length > 0 ? C.cheat : C.clean, opacity: pulse ? 1 : 0.3 }} />
-        <span style={{ color: C.bright, fontSize: 10, letterSpacing: 2 }}>ZK-GUARD</span>
-        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab" }}>{clipName}</span>
-        <span style={{ color: C.dim, fontSize: 9 }}>{elapsedStr}</span>
-        <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+        <span style={{ color: C.bright, fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>AEGIS</span>
+        <span style={{ flex: 1, color: C.dim, fontSize: 10, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "grab", fontWeight: 500 }}>{clipName}</span>
+        <span style={{ color: C.dim, fontSize: 10, fontWeight: 600 }}>{elapsedStr}</span>
+        <button onClick={() => setMini(true)} style={{ WebkitAppRegion: "no-drag", background: "none", border: "none", color: C.dim, cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1 }}>×</button>
       </div>
+
+      <ConnectionWidget pulse={pulse} />
 
       <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
         {[
           { val: suspects.length,       label: "SUSPECTS",  color: suspects.length > 0 ? C.cheat : C.dim },
-          { val: players.length,        label: "PLAYERS",   color: C.bright },
+          { val: players.length,        label: "PLAYERS",   color: C.text },
           { val: edges.length, label: "ANOMALIES", color: edges.length > 0 ? C.warn : C.dim },
         ].map((s, i) => (
-          <div key={i} style={{ flex: 1, padding: "8px 0", textAlign: "center", borderLeft: i > 0 ? `1px solid ${C.border}` : "none" }}>
-            <div style={{ fontSize: 20, fontWeight: "bold", color: s.color, lineHeight: 1.2 }}>{s.val}</div>
-            <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1, marginTop: 2 }}>{s.label}</div>
+          <div key={i} style={{ flex: 1, padding: "10px 0", textAlign: "center", borderLeft: i > 0 ? `1px solid ${C.border}` : "none" }}>
+            <div style={{ fontSize: 20, fontWeight: "700", color: s.color, lineHeight: 1.2 }}>{s.val}</div>
+            <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1, marginTop: 2, fontWeight: 600 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ padding: "10px 12px 8px" }}>
-        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 6 }}>POSITION MESH · WALLHACK ANALYSIS</div>
+      <div style={{ padding: "12px 14px 10px" }}>
+        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>POSITION MESH · WALLHACK ANALYSIS</div>
         <NodalGraph players={players} knowledgeEdges={edges} selected={selected} onSelect={setSelected} isHacking={isHacking} tick={tick} />
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "8px 12px" }}>
-        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 6 }}>PLAYER STATUS</div>
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 14px" }}>
+        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>PLAYER STATUS</div>
         {players.map(p => {
           const det = activeDetections[p.id];
           const flagged = det && Object.values(det).some(d => d.active);
           const topConf = det ? Math.max(...Object.values(det).map(d => d.confidence)) : 0;
           return (
-            <div key={p.id} onClick={() => det && setSelected(selected === p.id ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", marginBottom: 2, borderRadius: 4, cursor: det ? "pointer" : "default", background: selected === p.id ? C.card : "transparent", border: `1px solid ${selected === p.id ? C.border : "transparent"}` }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", flexShrink: 0, background: p.team === "ct" ? C.ct : C.t }} />
-              <span style={{ flex: 1, color: flagged ? C.bright : C.text, fontSize: 11 }}>{p.name}</span>
-              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 3, color: flagged ? C.cheat : det ? C.text : C.dim, background: flagged ? `${C.cheat}18` : "transparent", border: `1px solid ${flagged ? `${C.cheat}40` : C.border}` }}>
+            <div key={p.id} onClick={() => det && setSelected(selected === p.id ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", marginBottom: 2, borderRadius: 4, cursor: det ? "pointer" : "default", background: selected === p.id ? C.card : "transparent", border: `1px solid ${selected === p.id ? C.border : "transparent"}` }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: p.team === "ct" ? C.ct : C.t }} />
+              <span style={{ flex: 1, color: flagged ? C.bright : C.text, fontSize: 11, fontWeight: 600 }}>{p.name}</span>
+              <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 4, fontWeight: 700, color: flagged ? C.cheat : det ? C.text : C.dim, background: flagged ? `${C.cheat}18` : "transparent", border: `1px solid ${flagged ? `${C.cheat}40` : C.border}` }}>
                 {flagged ? "FLAGGED" : det ? `${topConf}%` : "CLEAN"}
               </span>
             </div>
@@ -378,23 +505,23 @@ export default function App() {
       </div>
 
       {selDet && selPlayer && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: "8px 12px", background: C.card }}>
-          <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 10 }}>ANALYSIS · {selPlayer.name.toUpperCase()}</div>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: "12px 14px", background: C.card }}>
+          <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 12, fontWeight: 600 }}>ANALYSIS · {selPlayer.name.toUpperCase()}</div>
           {Object.entries(selDet).map(([mod, d]) => (
-            <div key={mod} style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <span style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: d.active ? C.cheat : C.text }}>{mod}</span>
-                {d.active && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 2, color: C.cheat, border: `1px solid ${C.cheat}` }}>DETECTED</span>}
+            <div key={mod} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: d.active ? C.cheat : C.text, fontWeight: 600 }}>{mod}</span>
+                {d.active && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, fontWeight: 700, color: C.cheat, border: `1px solid ${C.cheat}` }}>DETECTED</span>}
               </div>
               <Bar value={d.confidence} active={d.active} />
-              {d.note && d.active && <div style={{ fontSize: 9, color: C.dim, marginTop: 3, lineHeight: 1.4 }}>{d.note}</div>}
+              {d.note && d.active && <div style={{ fontSize: 10, color: C.dim, marginTop: 4, lineHeight: 1.4, fontWeight: 500 }}>{d.note}</div>}
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "4px 12px", display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, background: C.surface }}>
-        <span>ZK-GUARD v1.0</span>
+      <div style={{ borderTop: `1px solid ${C.border}`, padding: "6px 14px", display: "flex", justifyContent: "space-between", fontSize: 9, color: C.dim, background: C.surface, fontWeight: 600 }}>
+        <span>AEGIS ENGINE v1.0</span>
         <span style={{ color: isHacking ? `${C.cheat}99` : C.dim }}>TICK {tick.toLocaleString()}</span>
       </div>
     </div>
