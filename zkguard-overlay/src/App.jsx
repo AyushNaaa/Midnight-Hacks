@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
 
 const HAVEN_CONFIG = {
   clipName: "Haven  ·  Mid Control  ·  Wallhack ESP",
+  gameMode: "val",
   players: [
     // ── Attackers (POOFBALL's team) ──
     { id: "poof",   name: "POOFBALL777",  x: 0.42, y: 0.48, team: "t",  suspect: true },
@@ -51,6 +52,45 @@ const HAVEN_CONFIG = {
     { from: "poof", to: "ash",  anomaly: 0.88 },
     { from: "poof", to: "trit", anomaly: 0.85 },
     { from: "poof", to: "reel", anomaly: 0.81 },
+  ],
+};
+
+const OW_CONFIG = {
+  clipName: "Route 66  ·  Defense  ·  Aimbot Suite",
+  gameMode: "ow",
+  players: [
+    // ── Defenders (POOFBALL's team - Aimbotting) ──
+    { id: "poof", name: "POOFBALL777", x: 0.5, y: 0.6, team: "t", suspect: true },
+    { id: "tm1",  name: "SneakyBeaky", x: 0.4, y: 0.65, team: "t", suspect: true },
+    { id: "tm2",  name: "GigaChad",    x: 0.6, y: 0.65, team: "t", suspect: true },
+    { id: "tm3",  name: "HealsPlz",    x: 0.45, y: 0.7, team: "t", suspect: true },
+    { id: "tm4",  name: "TankDiff",    x: 0.55, y: 0.7, team: "t", suspect: true },
+    // ── Attackers ──
+    { id: "en1",  name: "TracerMain",  x: 0.4, y: 0.3, team: "ct" },
+    { id: "en2",  name: "GenjiGod",    x: 0.6, y: 0.3, team: "ct" },
+    { id: "en3",  name: "AnaMom",      x: 0.5, y: 0.2, team: "ct" },
+    { id: "en4",  name: "ReinShield",  x: 0.5, y: 0.4, team: "ct" },
+    { id: "en5",  name: "MercyPocket", x: 0.55, y: 0.25, team: "ct" },
+  ],
+  detections: {
+    poof: {
+      aimbot:   { active: true,  confidence: 99, note: "Perfect lock-on to head hitboxes · 0ms reaction time · 7 flicks" },
+      wallhack: { active: false, confidence: 24, note: "" },
+      movement: { active: true,  confidence: 91, note: "Unnatural tracking through vertical movement abilities" },
+    },
+    tm1: { aimbot: { active: true, confidence: 95, note: "Aimbot signature detected" } },
+    tm2: { aimbot: { active: true, confidence: 96, note: "Aimbot signature detected" } },
+    tm3: { aimbot: { active: true, confidence: 89, note: "Aimbot signature detected" } },
+    tm4: { aimbot: { active: true, confidence: 92, note: "Aimbot signature detected" } },
+  },
+  knowledgeEdges: [
+    { from: "poof", to: "en1", anomaly: 0.99 },
+    { from: "poof", to: "en2", anomaly: 0.98 },
+    { from: "poof", to: "en3", anomaly: 0.95 },
+    { from: "tm1",  to: "en4", anomaly: 0.92 },
+    { from: "tm2",  to: "en5", anomaly: 0.94 },
+    { from: "tm3",  to: "en1", anomaly: 0.88 },
+    { from: "tm4",  to: "en2", anomaly: 0.91 },
   ],
 };
 
@@ -97,6 +137,81 @@ function Bar({ value, active }) {
       <span style={{ fontSize: 10, color, minWidth: 32, textAlign: "right", fontFamily: fontMain, fontWeight: 600 }}>
         {value}%
       </span>
+    </div>
+  );
+}
+
+// ── LIVE KINEMATICS GRAPH (AIMBOT DETECTOR) ──
+function KinematicsGraph({ gameMode, isHacking }) {
+  const [data, setData] = useState(Array(45).fill(0));
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setData(prev => {
+        const newData = [...prev.slice(1)];
+        let accel = 10 + Math.random() * 20; // baseline noise
+        
+        if (isHacking) {
+          if (gameMode === 'ow') {
+            // Overwatch: very sudden, random, high spikes (flicking)
+            const isFlick = Math.random() > 0.85; // more frequent flicks
+            if (isFlick) accel = 85 + Math.random() * 15;
+          } else if (gameMode === 'val') {
+            // Valorant: less sudden, lower spikes, occasional tracking corrections
+            const isFlick = Math.random() > 0.92;
+            if (isFlick) accel = 60 + Math.random() * 25;
+            else accel += Math.random() * 10; // slightly higher baseline when wallhacking
+          }
+        }
+        
+        newData.push(accel);
+        return newData;
+      });
+    }, 80);
+    return () => clearInterval(interval);
+  }, [gameMode, isHacking]);
+
+  return (
+    <div style={{ 
+      height: 140, 
+      position: "relative", 
+      padding: "16px 20px", 
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 4,
+      marginBottom: 12,
+      margin: "0 14px",
+      marginTop: -4
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 9, color: C.bright, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 600 }}>
+          Kinematic Vector Stream
+        </div>
+        <div style={{ fontSize: 9, color: C.dim }}>
+          dt: 80ms
+        </div>
+      </div>
+      
+      {/* Target Line */}
+      <div style={{ position: "absolute", top: 56, left: 20, right: 20, borderTop: `1px dashed ${C.cheat}66` }} />
+      <div style={{ position: "absolute", top: 48, right: 20, fontSize: 8, color: C.cheat, fontWeight: 700 }}>THLD</div>
+      
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 75, width: "100%" }}>
+        {data.map((val, i) => {
+          const isSpike = val > 75;
+          return (
+            <div key={i} style={{
+              flex: 1,
+              height: `${val}%`,
+              background: isSpike ? C.cheat : C.bright,
+              opacity: isSpike ? 1 : (val / 100) * 0.8 + 0.2,
+              borderRadius: '2px 2px 0 0',
+              transition: 'height 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: isSpike ? `0 0 8px ${C.cheat}` : "none"
+            }} />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -366,7 +481,17 @@ export default function App() {
     if (e.key === "h" || e.key === "H") {
       setIsHacking(v => {
         const nextHacking = !v;
+        // If we are turning hacking ON with H, load Haven config. Otherwise IDLE.
         setConfig(nextHacking ? HAVEN_CONFIG : DEFAULT_CONFIG);
+        return nextHacking;
+      });
+      setSelected(null);
+    }
+    if (e.key === "j" || e.key === "J") {
+      setIsHacking(v => {
+        const nextHacking = !v;
+        // If we are turning hacking ON with J, load OW config. Otherwise IDLE.
+        setConfig(nextHacking ? OW_CONFIG : DEFAULT_CONFIG);
         return nextHacking;
       });
       setSelected(null);
@@ -482,9 +607,11 @@ export default function App() {
       </div>
 
       <div style={{ padding: "12px 14px 10px" }}>
-        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>POSITION MESH · WALLHACK ANALYSIS</div>
+        <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>POSITION MESH · BEHAVIORAL ANALYSIS</div>
         <NodalGraph players={players} knowledgeEdges={edges} selected={selected} onSelect={setSelected} isHacking={isHacking} tick={tick} />
       </div>
+
+      <KinematicsGraph gameMode={config.gameMode} isHacking={isHacking} />
 
       <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 14px" }}>
         <div style={{ fontSize: 9, color: C.dim, letterSpacing: 1.5, marginBottom: 8, fontWeight: 600 }}>PLAYER STATUS</div>
