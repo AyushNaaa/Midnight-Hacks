@@ -46,7 +46,16 @@ const HAVEN_CONFIG = {
       movement: { active: true,  confidence: 87, note: "Pre-rotated to enemy positions 1.8s before line of sight · 5 instances" },
     },
   },
-  knowledgeEdges: const OW_CONFIG = {
+  knowledgeEdges: [
+    { from: "poof", to: "iced", anomaly: 0.96 },
+    { from: "poof", to: "ben",  anomaly: 0.92 },
+    { from: "poof", to: "ash",  anomaly: 0.88 },
+    { from: "poof", to: "trit", anomaly: 0.85 },
+    { from: "poof", to: "reel", anomaly: 0.81 },
+  ],
+};
+
+const OW_CONFIG = {
   clipName: "Route 66  ·  Defense  ·  Aimbot Suite",
   gameMode: "ow",
   players: [
@@ -90,6 +99,7 @@ const C = {
   warn:    "#f59e0b",
   cheat:   "#ef4444",
   ct:      "#3b82f6",
+  t:       "#f97316",
 };
 
 const fontMain = "'Inter', -apple-system, sans-serif";
@@ -462,23 +472,41 @@ export default function App() {
   useEffect(() => {
     if (isHacking) {
       if (config.gameMode === 'ow') {
-        // Overwatch: Dynamic random targeting
+        // Overwatch: Each defender independently switches target at random intervals
         const attackers = players.filter(p => p.team === 'ct');
         const defenders = players.filter(p => p.team === 't' && p.suspect);
         
-        const generateEdges = () => {
-          return defenders.map(d => {
-            const target = attackers[Math.floor(Math.random() * attackers.length)];
-            return { from: d.id, to: target.id, anomaly: 0.9 + Math.random() * 0.09 };
-          });
-        };
+        // Initialize: each defender locks onto a random attacker
+        const initial = defenders.map(d => ({
+          from: d.id,
+          to: attackers[Math.floor(Math.random() * attackers.length)].id,
+          anomaly: 0.9 + Math.random() * 0.09,
+        }));
+        setDynamicOWEdges(initial);
         
-        setDynamicOWEdges(generateEdges()); // Initial set
-        const id = setInterval(() => {
-          setDynamicOWEdges(generateEdges());
-        }, 1200 + Math.random() * 800); // Random switch every 1.2s to 2.0s
+        // Each defender gets its own independent re-targeting loop
+        const timers = [];
+        defenders.forEach((d, idx) => {
+          const scheduleNext = () => {
+            const delay = 300 + Math.random() * 1700; // 300ms to 2000ms
+            const t = setTimeout(() => {
+              setDynamicOWEdges(prev => {
+                const copy = [...prev];
+                copy[idx] = {
+                  from: d.id,
+                  to: attackers[Math.floor(Math.random() * attackers.length)].id,
+                  anomaly: 0.9 + Math.random() * 0.09,
+                };
+                return copy;
+              });
+              scheduleNext(); // recursively schedule the next switch
+            }, delay);
+            timers.push(t);
+          };
+          scheduleNext();
+        });
         
-        return () => clearInterval(id);
+        return () => timers.forEach(clearTimeout);
       } else {
         // Valorant: Pop-in static targeting
         setVisibleEdgesCount(1);
@@ -595,8 +623,8 @@ export default function App() {
           onMouseEnter={(e) => { e.currentTarget.style.background = C.card; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.bg; }}
         >
-          <img src="/logo.png" alt="AEGIS" style={{ width: "60%", height: "60%", objectFit: "contain", pointerEvents: "none", opacity: 0.8, filter: "grayscale(100%) brightness(200%)" }} 
-            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="color:#fff;font-weight:500;font-size:12px;">AEGIS</span>'; }}
+          <img src="/logo.png" alt="AEGIS" style={{ width: "70%", height: "70%", objectFit: "contain", pointerEvents: "none", opacity: 0.9, filter: "drop-shadow(0 0 8px rgba(244, 127, 36, 0.4))" }} 
+            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="color:#F47F24;font-weight:700;font-size:12px;">AEGIS</span>'; }}
           />
         </div>
       </div>
