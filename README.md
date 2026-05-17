@@ -96,33 +96,3 @@ Midnight-Hacks/
 | POST | `/sim/player/{id}/cheat/{type}` | Toggle cheat profile |
 | GET | `/sim/status` | Get simulation status |
 
-## Team Task Distribution
-
-Each section below maps to a PRD phase. Stubs are in place — pick a task and flesh it out.
-
-### 🔴 High Priority
-- [ ] **§2A** — Implement Transformer model in `server/detection/models/` + `scripts/train_transformer.py`
-- [ ] **§2B** — Implement GAT model in `server/detection/models/` + `scripts/train_gat.py`
-- [ ] **§2C** — Generate synthetic training data in `scripts/generate_cheat_data.py` + `scripts/generate_mesh_data.py`
-- [ ] **§3** — Polish dashboard visualization components (canvas minimap, FFT, scatter plots)
-
-### 🟡 Medium Priority
-- [ ] **§5** — Improve match simulator realism (events, combat, respawning)
-- [ ] **§2D** — Upgrade `detection/rules.py` — implement reaction, tracking, collab analysis
-- [ ] **§3** — Add canvas-based aim trajectory + behavioral mesh minimap
-
-### 🟢 Lower Priority / Stretch
-- [ ] **§4** — Midnight ZK integration (Compact contract deployment + proof server)
-- [ ] **§6** — Record 90-second demo video
-- [ ] **§6** — Write PITCH.md
-
-## Cheat Types (for demo)
-
-| Cheat | API Value | What it does |
-|-------|-----------|--------------|
-| Clean | `clean` | Normal behavior |
-| Aimbot | `aimbot` | Snaps aim to nearest enemy |
-| Wallhack | `wallhack` | Tracks enemies through walls |
-| Speed Hack | `speedhack` | 2.5x movement speed |
-| Macro | `macro` | Periodic recoil compensation |
-| Collab | `collab` | Mirrors teammate's aim direction |
